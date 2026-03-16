@@ -23,8 +23,7 @@ const FIELD_TYPES = {
   'select-single': { label: 'Single Select', icon: '▼' },
   'ai-field': { label: 'AI Field', icon: '✨' },
   'date': { label: 'Date', icon: '📅' },
-  'number': { label: 'Number', icon: '#' },
-  'attachment': { label: 'Attachment', icon: '📎' }
+  'number': { label: 'Number', icon: '#' }
 }
 
 const DEFAULT_PAGES = {
@@ -41,7 +40,6 @@ export default function App() {
   const [error, setError] = useState(null)
   const [sessionSeconds, setSessionSeconds] = useState(24 * 60 * 60)
   const [db, setDb] = useState(null)
-  const [colMenuOpen, setColMenuOpen] = useState(null)
   const [showColumnConfig, setShowColumnConfig] = useState(false)
   const [newColConfig, setNewColConfig] = useState({ name: '', type: 'text-short', options: [] })
 
@@ -130,9 +128,7 @@ export default function App() {
       id: `col-${Date.now()}`,
       name: newColConfig.name,
       type: newColConfig.type,
-      options: newColConfig.type === 'select-single' ? newColConfig.options : null,
-      maxLength: newColConfig.type === 'text-short' ? 25 : null,
-      maxWords: newColConfig.type === 'text-long' ? 10000 : null
+      options: newColConfig.type === 'select-single' ? newColConfig.options : null
     }
 
     setPages(prev => ({
@@ -147,8 +143,24 @@ export default function App() {
     setNewColConfig({ name: '', type: 'text-short', options: [] })
   }
 
+  const editColumn = (colId) => {
+    const col = pages[currentPage].columns.find(c => c.id === colId)
+    const newName = prompt('New column name:', col.name)
+    if (newName && newName.trim()) {
+      setPages(prev => ({
+        ...prev,
+        [currentPage]: {
+          ...prev[currentPage],
+          columns: prev[currentPage].columns.map(c =>
+            c.id === colId ? { ...c, name: newName } : c
+          )
+        }
+      }))
+    }
+  }
+
   const deleteColumn = (colId) => {
-    if (window.confirm('Delete this column?')) {
+    if (window.confirm('Delete this column and all its data?')) {
       setPages(prev => ({
         ...prev,
         [currentPage]: {
@@ -288,45 +300,29 @@ export default function App() {
                 <th style={{ width: '40px' }}>#</th>
                 {page.columns.map(col => (
                   <th key={col.id} id={`col-${col.id}`}>
-                    <div className="col-header">
-                      <span>{FIELD_TYPES[col.type]?.icon || '•'}</span>
-                      <span>{col.name}</span>
-                      <span
-                        className="col-menu"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setColMenuOpen(colMenuOpen === col.id ? null : col.id)
-                        }}
-                      >
-                        ⋮
-                      </span>
-                      {colMenuOpen === col.id && (
-                        <div className="col-menu-dropdown">
-                          <button onClick={() => {
-                            const newName = prompt('New column name:', col.name)
-                            if (newName) {
-                              setPages(prev => ({
-                                ...prev,
-                                [currentPage]: {
-                                  ...prev[currentPage],
-                                  columns: prev[currentPage].columns.map(c =>
-                                    c.id === col.id ? { ...c, name: newName } : c
-                                  )
-                                }
-                              }))
-                              setColMenuOpen(null)
-                            }
-                          }}>
-                            Rename
-                          </button>
-                          <button onClick={() => {
-                            deleteColumn(col.id)
-                            setColMenuOpen(null)
-                          }}>
-                            Delete
-                          </button>
-                        </div>
-                      )}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span>{FIELD_TYPES[col.type]?.icon || '•'}</span>
+                        <span>{col.name}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.25rem' }}>
+                        <button
+                          className="btn"
+                          style={{ padding: '0.3rem 0.6rem', fontSize: '12px' }}
+                          onClick={() => editColumn(col.id)}
+                          title="Edit column name"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          className="btn"
+                          style={{ padding: '0.3rem 0.6rem', fontSize: '12px', color: 'var(--danger)' }}
+                          onClick={() => deleteColumn(col.id)}
+                          title="Delete column"
+                        >
+                          ✕
+                        </button>
+                      </div>
                     </div>
                   </th>
                 ))}
@@ -379,6 +375,7 @@ export default function App() {
           onUpdate={(value) => updateCell(expandedCell.rowId, expandedCell.colId, value)}
           onClose={() => setExpandedCell(null)}
           apiKeys={user.apiKeys}
+          setError={setError}
         />
       )}
     </div>
@@ -422,7 +419,7 @@ function LoginScreen({ onLogin, error }) {
           <div className="form-group">
             <label>
               <input type="checkbox" checked={showApiKeys} onChange={(e) => setShowApiKeys(e.target.checked)} />
-              {' '}Add API Keys (Optional)
+              {' '}Add API Keys for AI Features (Optional)
             </label>
           </div>
 
@@ -433,7 +430,7 @@ function LoginScreen({ onLogin, error }) {
                   <label>{provider.charAt(0).toUpperCase() + provider.slice(1)} API Key</label>
                   <input
                     type="password"
-                    placeholder={`Enter ${provider} API key (optional)`}
+                    placeholder={`Enter ${provider} API key`}
                     onChange={(e) => setApiKeys(prev => ({ ...prev, [provider]: e.target.value }))}
                   />
                 </div>
@@ -535,7 +532,7 @@ function ColumnConfigModal({ config, setConfig, onAdd, onClose }) {
   )
 }
 
-function CellPanel({ row, column, onUpdate, onClose, apiKeys }) {
+function CellPanel({ row, column, onUpdate, onClose, apiKeys, setError }) {
   const [value, setValue] = useState(row.cells[column.id] || '')
   const [aiLoading, setAiLoading] = useState(false)
   const [aiResult, setAiResult] = useState(null)
@@ -543,33 +540,19 @@ function CellPanel({ row, column, onUpdate, onClose, apiKeys }) {
   const [aiModel, setAiModel] = useState('claude-3-5-sonnet')
   const [aiPrompt, setAiPrompt] = useState('')
 
-  const validateTextLength = (text) => {
-    if (column.type === 'text-short' && column.maxLength) {
-      if (text.length > column.maxLength) {
-        alert(`Maximum ${column.maxLength} characters allowed`)
-        return false
-      }
-    }
-    if (column.type === 'text-long' && column.maxWords) {
-      const words = text.trim().split(/\s+/).length
-      if (words > column.maxWords) {
-        alert(`Maximum ${column.maxWords} words allowed`)
-        return false
-      }
-    }
-    return true
-  }
-
   const handleSave = () => {
-    if (validateTextLength(value)) {
-      onUpdate(value)
-      onClose()
-    }
+    onUpdate(value)
+    onClose()
   }
 
   const handleAIGenerate = async () => {
     if (!aiPrompt.trim()) {
       alert('Please enter a prompt')
+      return
+    }
+
+    if (!apiKeys || !apiKeys[aiProvider]) {
+      setError('API key not configured for ' + aiProvider + '. Please add it in login settings.')
       return
     }
 
@@ -588,17 +571,24 @@ function CellPanel({ row, column, onUpdate, onClose, apiKeys }) {
 
       if (response.ok) {
         const data = await response.json()
-        setAiResult(data.content)
-        setValue(data.content)
+        if (data.content) {
+          setAiResult(data.content)
+          setValue(data.content)
+        } else {
+          setError('No content generated')
+        }
       } else {
-        alert('Generation failed')
+        const errorData = await response.json()
+        setError('Generation failed: ' + (errorData.error || 'Unknown error'))
       }
     } catch (err) {
-      alert('Error: ' + err.message)
+      setError('Error: ' + err.message)
     } finally {
       setAiLoading(false)
     }
   }
+
+  if (!column) return null
 
   return (
     <div className="panel">
@@ -618,8 +608,7 @@ function CellPanel({ row, column, onUpdate, onClose, apiKeys }) {
               type="text"
               value={value}
               onChange={(e) => setValue(e.target.value)}
-              placeholder="Enter text (max 25 characters)"
-              maxLength={25}
+              placeholder="Enter text"
             />
           )}
 
@@ -627,7 +616,7 @@ function CellPanel({ row, column, onUpdate, onClose, apiKeys }) {
             <textarea
               value={value}
               onChange={(e) => setValue(e.target.value)}
-              placeholder="Enter text (max 10000 words)"
+              placeholder="Enter text"
             />
           )}
 
@@ -666,7 +655,7 @@ function CellPanel({ row, column, onUpdate, onClose, apiKeys }) {
                 <label>Provider</label>
                 <select value={aiProvider} onChange={(e) => {
                   setAiProvider(e.target.value)
-                  setAiModel(Object.keys(AI_MODELS[e.target.value])[0]?.id || '')
+                  setAiModel(AI_MODELS[e.target.value][0]?.id || '')
                 }}>
                   {Object.keys(AI_MODELS).map(p => (
                     <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
