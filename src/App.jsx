@@ -1,22 +1,5 @@
 import React, { useState, useEffect } from 'react'
 
-const AI_MODELS = {
-  anthropic: [
-    { id: 'claude-3-5-sonnet', label: 'Sonnet 3.5' },
-    { id: 'claude-3-opus', label: 'Opus 3' }
-  ],
-  openai: [
-    { id: 'gpt-4', label: 'GPT-4' },
-    { id: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' }
-  ],
-  google: [
-    { id: 'gemini-pro', label: 'Gemini Pro' }
-  ],
-  deepseek: [
-    { id: 'deepseek-v3', label: 'DeepSeek V3' }
-  ]
-}
-
 const FIELD_TYPES = {
   'text-short': { label: 'Short Text', icon: 'A' },
   'text-long': { label: 'Long Text', icon: '¶' },
@@ -30,6 +13,13 @@ const DEFAULT_PAGES = {
   textbook: { name: 'Textbook', columns: [], rows: [] },
   questions: { name: 'Questions', columns: [], rows: [] },
   'lesson-plans': { name: 'Lesson Plans', columns: [], rows: [] }
+}
+
+const AI_PROVIDERS = {
+  anthropic: 'Claude (Anthropic)',
+  openai: 'ChatGPT (OpenAI)',
+  google: 'Gemini (Google)',
+  deepseek: 'DeepSeek'
 }
 
 export default function App() {
@@ -425,13 +415,13 @@ function LoginScreen({ onLogin, error }) {
 
           {showApiKeys && (
             <div style={{ marginBottom: '1rem' }}>
-              {Object.keys(AI_MODELS).map(provider => (
-                <div key={provider} className="form-group">
-                  <label>{provider.charAt(0).toUpperCase() + provider.slice(1)} API Key</label>
+              {Object.entries(AI_PROVIDERS).map(([key, label]) => (
+                <div key={key} className="form-group">
+                  <label>{label} API Key</label>
                   <input
                     type="password"
-                    placeholder={`Enter ${provider} API key`}
-                    onChange={(e) => setApiKeys(prev => ({ ...prev, [provider]: e.target.value }))}
+                    placeholder={`Enter ${label} API key`}
+                    onChange={(e) => setApiKeys(prev => ({ ...prev, [key]: e.target.value }))}
                   />
                 </div>
               ))}
@@ -537,7 +527,6 @@ function CellPanel({ row, column, onUpdate, onClose, apiKeys, setError }) {
   const [aiLoading, setAiLoading] = useState(false)
   const [aiResult, setAiResult] = useState(null)
   const [aiProvider, setAiProvider] = useState('anthropic')
-  const [aiModel, setAiModel] = useState('claude-3-5-sonnet')
   const [aiPrompt, setAiPrompt] = useState('')
 
   const handleSave = () => {
@@ -552,7 +541,7 @@ function CellPanel({ row, column, onUpdate, onClose, apiKeys, setError }) {
     }
 
     if (!apiKeys || !apiKeys[aiProvider]) {
-      setError('API key not configured for ' + aiProvider + '. Please add it in login settings.')
+      setError('API key not configured for ' + AI_PROVIDERS[aiProvider] + '. Please add it in login settings.')
       return
     }
 
@@ -563,7 +552,6 @@ function CellPanel({ row, column, onUpdate, onClose, apiKeys, setError }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           provider: aiProvider,
-          model: aiModel,
           prompt: aiPrompt,
           apiKey: apiKeys[aiProvider]
         })
@@ -652,21 +640,10 @@ function CellPanel({ row, column, onUpdate, onClose, apiKeys, setError }) {
                 <div className="ai-result">{aiResult}</div>
               )}
               <div className="form-group">
-                <label>Provider</label>
-                <select value={aiProvider} onChange={(e) => {
-                  setAiProvider(e.target.value)
-                  setAiModel(AI_MODELS[e.target.value][0]?.id || '')
-                }}>
-                  {Object.keys(AI_MODELS).map(p => (
-                    <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Model</label>
-                <select value={aiModel} onChange={(e) => setAiModel(e.target.value)}>
-                  {AI_MODELS[aiProvider].map(m => (
-                    <option key={m.id} value={m.id}>{m.label}</option>
+                <label>AI Provider</label>
+                <select value={aiProvider} onChange={(e) => setAiProvider(e.target.value)}>
+                  {Object.entries(AI_PROVIDERS).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
                   ))}
                 </select>
               </div>
