@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AI Content Studio - K-12 Educational Content Management System">
+    <title>AI Content Studio</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --color-primary: #007bff;
+            --color-success: #28a745;
+            --color-warning: #ffc107;
+            --color-danger: #dc3545;
+            --color-bg-primary: #ffffff;
+            --color-bg-secondary: #f8f9fa;
+            --color-bg-tertiary: #e9ecef;
+            --color-text-primary: #1a1a1a;
+            --color-text-secondary: #666666;
+            --color-text-tertiary: #999999;
+            --color-border: #dee2e6;
+            --border-radius: 8px;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --color-bg-primary: #1a1a1a;
+                --color-bg-secondary: #2a2a2a;
+                --color-bg-tertiary: #333333;
+                --color-text-primary: #ffffff;
+                --color-text-secondary: #cccccc;
+                --color-text-tertiary: #999999;
+                --color-border: #444444;
+            }
+        }
+
+        html, body {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: var(--color-bg-primary);
+            color: var(--color-text-primary);
+        }
+
+        body {
+            overflow: hidden;
+        }
+
+        .app-container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .sidebar {
+            width: 200px;
+            background-color: var(--color-bg-primary);
+            border-right: 1px solid var(--color-border);
+            padding: 1.5rem 1rem;
+            overflow-y: auto;
+        }
+
+        .sidebar h3 {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--color-text-secondary);
+            text-transform: uppercase;
+            margin-bottom: 1rem;
+            letter-spacing: 0.5px;
+        }
+
+        .page-btn {
+            width: 100%;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            border: 0.5px solid transparent;
+            background-color: transparent;
+            color: var(--color-text-primary);
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .page-btn:hover {
+            background-color: var(--color-bg-secondary);
+        }
+
+        .page-btn.active {
+            background-color: var(--color-primary);
+            color: white;
+            border-color: var(--color-primary);
+            font-weight: 500;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            padding: 1rem 1.5rem;
+            background-color: var(--color-bg-primary);
+            border-bottom: 1px solid var(--color-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-left h2 {
+            font-size: 18px;
+            font-weight: 500;
+            margin: 0 0 0.25rem 0;
+        }
+
+        .header-left p {
+            font-size: 12px;
+            color: var(--color-text-secondary);
+            margin: 0;
+        }
+
+        .header-right {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        .header-right span {
+            font-size: 12px;
+            color: var(--color-text-secondary);
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border: 0.5px solid var(--color-border);
+            border-radius: var(--border-radius);
+            background-color: transparent;
+            color: var(--color-text-primary);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background-color: var(--color-bg-secondary);
+        }
+
+        .btn-primary {
+            background-color: var(--color-primary);
+            color: white;
+            border-color: var(--color-primary);
+        }
+
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+
+        .table-container {
+            flex: 1;
+            overflow: auto;
+            background-color: var(--color-bg-primary);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        thead {
+            position: sticky;
+            top: 0;
+            background-color: var(--color-bg-secondary);
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        th {
+            padding: 0.75rem;
+            text-align: left;
+            font-weight: 500;
+            white-space: nowrap;
+            border-right: 0.5px solid var(--color-border);
+        }
+
+        td {
+            padding: 0.75rem;
+            border-bottom: 0.5px solid var(--color-border);
+            cursor: pointer;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 200px;
+        }
+
+        tr:hover td {
+            background-color: var(--color-bg-secondary);
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal {
+            background-color: var(--color-bg-primary);
+            border-radius: var(--border-radius);
+            padding: 2rem;
+            max-width: 500px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal h1 {
+            font-size: 24px;
+            margin-bottom: 0.5rem;
+        }
+
+        .modal p {
+            color: var(--color-text-secondary);
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: var(--color-text-primary);
+        }
+
+        input, textarea, select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 0.5px solid var(--color-border);
+            border-radius: var(--border-radius);
+            font-size: 13px;
+            background-color: var(--color-bg-primary);
+            color: var(--color-text-primary);
+            font-family: inherit;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .panel {
+            position: fixed;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 480px;
+            background-color: var(--color-bg-primary);
+            border-left: 1px solid var(--color-border);
+            overflow-y: auto;
+            z-index: 999;
+            box-shadow: -2px 0 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .panel-header {
+            padding: 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .panel-header h3 {
+            margin: 0;
+            font-size: 16px;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: var(--color-text-secondary);
+        }
+
+        .panel-content {
+            padding: 1.5rem;
+        }
+
+        .field {
+            margin-bottom: 1.5rem;
+        }
+
+        .field-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--color-text-secondary);
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .ai-section {
+            background-color: var(--color-bg-secondary);
+            padding: 1rem;
+            border-radius: var(--border-radius);
+            border: 0.5px solid var(--color-border);
+        }
+
+        .ai-result {
+            background-color: var(--color-bg-primary);
+            border: 0.5px solid var(--color-border);
+            padding: 0.75rem;
+            border-radius: var(--border-radius);
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            line-height: 1.5;
+            margin-bottom: 1rem;
+        }
+
+        .error-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background-color: var(--color-danger);
+            color: white;
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 2000;
+        }
+
+        .warning-banner {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: var(--color-warning);
+            color: #000;
+            padding: 0.75rem 1rem;
+            font-size: 13px;
+            z-index: 1999;
+        }
+
+        .sync-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 12px;
+        }
+
+        .sync-indicator.synced {
+            color: var(--color-success);
+        }
+
+        .sync-indicator.syncing {
+            color: var(--color-warning);
+        }
+
+        .sync-indicator.failed {
+            color: var(--color-danger);
+        }
+
+        .delete-btn {
+            background: none;
+            border: none;
+            color: var(--color-text-tertiary);
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .delete-btn:hover {
+            color: var(--color-danger);
+        }
+
+        .panel-footer {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--color-border);
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .panel-footer button {
+            flex: 1;
+            padding: 0.75rem;
+            border: 0.5px solid var(--color-border);
+            border-radius: var(--border-radius);
+            background-color: var(--color-bg-primary);
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .panel-footer .btn-primary {
+            background-color: var(--color-primary);
+            color: white;
+            border-color: var(--color-primary);
+        }
+
+        .spin {
+            display: inline-block;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .session-countdown {
+            font-size: 12px;
+            color: var(--color-text-secondary);
+        }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+
+    <script>
+        const AI_MODELS = {
+            anthropic: [
+                { id: 'claude-3-5-sonnet', label: 'Sonnet 3.5' },
+                { id: 'claude-3-opus', label: 'Opus 3' }
+            ],
+            openai: [
+                { id: 'gpt-4', label: 'GPT-4' },
+                { id: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' }
+            ],
+            google: [
+                { id: 'gemini-pro', label: 'Gemini Pro' }
+            ],
+            deepseek: [
+                { id: 'deepseek-v3', label: 'DeepSeek V3' }
+            ]
+        };
+
+        const COLUMN_TYPES = {
+            'text-short': { label: 'Short Text', icon: 'A' },
+            'text-long': { label: 'Long Text', icon: '¶' },
+            'select-single': { label: 'Single Select', icon: '○' },
+            'ai-field': { label: 'AI Field', icon: '✨' },
+            'date': { label: 'Date', icon: '📅' },
+            'number': { label: 'Number', icon: '#' }
+        };
+
+        const DEFAULT_PAGES = {
+            textbook: {
+                name: 'Textbook',
+                columns: [
+                    { id: 'col-1', name: 'Record ID', type: 'text-short' },
+                    { id: 'col-2', name: 'Class', type: 'select-single' },
+                    { id: 'col-3', name: 'Subject', type: 'select-single' },
+                    { id: 'col-4', name: 'Topic', type: 'text-short' },
+                    { id: 'col-5', name: 'Chapter Title', type: 'text-long' }
+                ],
+                rows: []
+            },
+            questions: {
+                name: 'Questions',
+                columns: [
+                    { id: 'col-1', name: 'Question ID', type: 'text-short' },
+                    { id: 'col-2', name: 'Question Text', type: 'text-long' },
+                    { id: 'col-3', name: 'Difficulty', type: 'select-single' },
+                    { id: 'col-4', name: 'Answer Key', type: 'ai-field' }
+                ],
+                rows: []
+            },
+            'lesson-plans': {
+                name: 'Lesson Plans',
+                columns: [
+                    { id: 'col-1', name: 'Lesson ID', type: 'text-short' },
+                    { id: 'col-2', name: 'Lesson Title', type: 'text-short' },
+                    { id: 'col-3', name: 'Duration', type: 'text-short' },
+                    { id: 'col-4', name: 'Objectives', type: 'ai-field' }
+                ],
+                rows: []
+            }
+        };
+
+        class App {
+            constructor() {
+                this.user = null;
+                this.pages = DEFAULT_PAGES;
+                this.currentPage = 'textbook';
+                this.expandedCell = null;
+                this.error = null;
+                this.sessionSeconds = 24 * 60 * 60;
+                this.syncStatus = 'synced';
+                this.db = null;
+                this.init();
+            }
+
+            async init() {
+                await this.initDB();
+                this.loadSession();
+                this.startSessionTimer();
+                this.render();
+            }
+
+            async initDB() {
+                return new Promise((resolve, reject) => {
+                    const request = indexedDB.open('aiCMS', 1);
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = () => {
+                        this.db = request.result;
+                        resolve();
+                    };
+                    request.onupgradeneeded = (e) => {
+                        const db = e.target.result;
+                        if (!db.objectStoreNames.contains('workspace')) {
+                            db.createObjectStore('workspace', { keyPath: 'id' });
+                        }
+                    };
+                });
+            }
+
+            async saveData(key, data) {
+                return new Promise((resolve, reject) => {
+                    const tx = this.db.transaction('workspace', 'readwrite');
+                    const store = tx.objectStore('workspace');
+                    store.put({ id: key, data, timestamp: Date.now() });
+                    tx.oncomplete = () => {
+                        this.syncStatus = 'synced';
+                        resolve();
+                    };
+                    tx.onerror = () => {
+                        this.syncStatus = 'sync-failed';
+                        reject(tx.error);
+                    };
+                });
+            }
+
+            async loadData(key) {
+                return new Promise((resolve, reject) => {
+                    const tx = this.db.transaction('workspace', 'readonly');
+                    const store = tx.objectStore('workspace');
+                    const request = store.get(key);
+                    request.onsuccess = () => resolve(request.result?.data);
+                    request.onerror = () => reject(request.error);
+                });
+            }
+
+            loadSession() {
+                const stored = localStorage.getItem('cms_session');
+                if (stored) {
+                    const session = JSON.parse(stored);
+                    const elapsed = Date.now() - session.createdAt;
+                    const remaining = (24 * 60 * 60 * 1000) - elapsed;
+                    
+                    if (remaining > 0) {
+                        this.user = session.user;
+                        this.sessionSeconds = Math.floor(remaining / 1000);
+                    } else {
+                        this.logoutSession();
+                    }
+                }
+            }
+
+            startSessionTimer() {
+                setInterval(() => {
+                    if (this.user) {
+                        this.sessionSeconds--;
+                        if (this.sessionSeconds <= 0) {
+                            this.logoutSession();
+                            this.error = 'Session expired. Please log in again.';
+                        }
+                        this.render();
+                    }
+                }, 1000);
+            }
+
+            logoutSession() {
+                this.user = null;
+                localStorage.removeItem('cms_session');
+                this.sessionSeconds = 24 * 60 * 60;
+            }
+
+            handleLogin(email, name, apiKeys) {
+                this.user = { email, name, apiKeys };
+                localStorage.setItem('cms_session', JSON.stringify({
+                    user: this.user,
+                    createdAt: Date.now()
+                }));
+                this.sessionSeconds = 24 * 60 * 60;
+                this.error = null;
+                this.render();
+            }
+
+            handleAddRow() {
+                const newRow = {
+                    id: `row-${Date.now()}`,
+                    cells: this.pages[this.currentPage].columns.reduce((acc, col) => {
+                        acc[col.id] = '';
+                        return acc;
+                    }, {}),
+                    createdBy: this.user.email,
+                    createdAt: new Date().toISOString()
+                };
+
+                this.pages[this.currentPage].rows.push(newRow);
+                this.saveData('pages', this.pages);
+                this.render();
+            }
+
+            handleCellChange(rowId, colId, value) {
+                const row = this.pages[this.currentPage].rows.find(r => r.id === rowId);
+                if (row) {
+                    row.cells[colId] = value;
+                    this.saveData('pages', this.pages);
+                }
+            }
+
+            handleDeleteRow(rowId) {
+                this.pages[this.currentPage].rows = this.pages[this.currentPage].rows.filter(r => r.id !== rowId);
+                this.saveData('pages', this.pages);
+                this.render();
+            }
+
+            handleExport() {
+                const pageData = this.pages[this.currentPage];
+                let content = '| ' + pageData.columns.map(c => c.name).join(' | ') + ' |\n';
+                content += '| ' + pageData.columns.map(() => '---').join(' | ') + ' |\n';
+                
+                pageData.rows.forEach(row => {
+                    content += '| ' + pageData.columns.map(c => (row.cells[c.id] || '').replace(/\|/g, '\\|')).join(' | ') + ' |\n';
+                });
+
+                const blob = new Blob([content], { type: 'text/markdown' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `export-${this.currentPage}-${Date.now()}.md`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+
+            formatTime(seconds) {
+                const hours = Math.floor(seconds / 3600);
+                const mins = Math.floor((seconds % 3600) / 60);
+                return `${hours}h ${mins}m`;
+            }
+
+            render() {
+                const app = document.getElementById('app');
+                
+                if (!this.user) {
+                    app.innerHTML = this.renderLogin();
+                    this.attachLoginHandlers();
+                } else {
+                    app.innerHTML = this.renderApp();
+                    this.attachAppHandlers();
+                }
+            }
+
+            renderLogin() {
+                return `
+                    <div class="modal-overlay">
+                        <div class="modal">
+                            <h1>AI Content Studio</h1>
+                            <p>Enterprise-grade K-12 content management. Session expires after 24 hours.</p>
+                            
+                            ${this.error ? `<div style="padding: 0.75rem; background-color: var(--color-danger); color: white; border-radius: var(--border-radius); margin-bottom: 1rem; font-size: 13px;">${this.error}</div>` : ''}
+                            
+                            <form id="loginForm">
+                                <div class="form-group">
+                                    <label>Email</label>
+                                    <input type="email" id="email" placeholder="you@school.edu" required>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label>Name</label>
+                                    <input type="text" id="name" placeholder="Your name" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>
+                                        <input type="checkbox" id="showApiKeys"> API Keys (Expires after 24h)
+                                    </label>
+                                </div>
+
+                                <div id="apiKeysSection" style="display: none;">
+                                    ${Object.keys(AI_MODELS).map(provider => `
+                                        <div class="form-group">
+                                            <label>${provider.charAt(0).toUpperCase() + provider.slice(1)} API Key</label>
+                                            <input type="password" class="api-key-input" data-provider="${provider}" placeholder="Enter ${provider} API key">
+                                        </div>
+                                    `).join('')}
+                                </div>
+                                
+                                <button type="submit" class="btn btn-primary" style="width: 100%; padding: 0.75rem;">Start Session</button>
+                            </form>
+                            
+                            <p style="font-size: 11px; color: var(--color-text-tertiary); margin-top: 1rem;">
+                                🔒 API keys are stored securely and expire with your session.
+                            </p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            renderApp() {
+                const syncIcon = this.syncStatus === 'synced' ? '✓' : this.syncStatus === 'syncing' ? '⟳' : '⚠';
+                const syncColor = this.syncStatus === 'synced' ? 'var(--color-success)' : 'var(--color-warning)';
+
+                return `
+                    ${this.error ? `<div class="error-banner"><span>${this.error}</span><button class="close-btn" style="border: none; background: none; color: white; cursor: pointer;">✕</button></div>` : ''}
+                    
+                    ${this.sessionSeconds < 3600 ? `<div class="warning-banner">⚠️ Session expires in ${this.formatTime(this.sessionSeconds)}. Please re-login soon.</div>` : ''}
+                    
+                    <div class="app-container">
+                        <div class="sidebar">
+                            <h3>Pages</h3>
+                            ${Object.entries(this.pages).map(([key, page]) => `
+                                <button class="page-btn ${this.currentPage === key ? 'active' : ''}" data-page="${key}">
+                                    ${page.name}
+                                </button>
+                            `).join('')}
+                        </div>
+
+                        <div class="main-content">
+                            <div class="header">
+                                <div class="header-left">
+                                    <h2>${this.pages[this.currentPage].name}</h2>
+                                    <p>${this.user.email} • ${this.formatTime(this.sessionSeconds)} remaining</p>
+                                </div>
+                                <div class="header-right">
+                                    <div class="sync-indicator ${this.syncStatus}">
+                                        <span style="color: ${syncColor};">${syncIcon}</span>
+                                        <span>${this.syncStatus === 'synced' ? 'Synced' : this.syncStatus === 'syncing' ? 'Syncing...' : 'Sync failed'}</span>
+                                    </div>
+                                    <button class="btn btn-primary" id="addRowBtn">+ Add Row</button>
+                                    <button class="btn" id="exportBtn">⬇ Export</button>
+                                    <button class="btn" id="logoutBtn">Logout</button>
+                                </div>
+                            </div>
+
+                            <div class="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 40px;">#</th>
+                                            ${this.pages[this.currentPage].columns.map(col => `
+                                                <th>
+                                                    <span style="margin-right: 0.5rem;">${COLUMN_TYPES[col.type]?.icon || '•'}</span>${col.name}
+                                                </th>
+                                            `).join('')}
+                                            <th style="width: 60px;"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${this.pages[this.currentPage].rows.map((row, idx) => `
+                                            <tr>
+                                                <td style="width: 40px; text-align: center; color: var(--color-text-tertiary);">${idx + 1}</td>
+                                                ${this.pages[this.currentPage].columns.map(col => `
+                                                    <td data-row-id="${row.id}" data-col-id="${col.id}" style="cursor: pointer;">
+                                                        ${(row.cells[col.id] || '').substring(0, 60)}
+                                                    </td>
+                                                `).join('')}
+                                                <td style="width: 60px; text-align: center;">
+                                                    <button class="delete-btn" data-row-id="${row.id}">✕</button>
+                                                </td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        ${this.expandedCell ? this.renderPanel() : ''}
+                    </div>
+                `;
+            }
+
+            renderPanel() {
+                const row = this.pages[this.currentPage].rows.find(r => r.id === this.expandedCell.rowId);
+                if (!row) return '';
+
+                return `
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h3>Record Details</h3>
+                            <button class="close-btn" id="closePanelBtn">✕</button>
+                        </div>
+
+                        <div class="panel-content">
+                            ${this.pages[this.currentPage].columns.map(col => `
+                                <div class="field">
+                                    <div class="field-label">
+                                        <span>${COLUMN_TYPES[col.type]?.icon || '•'}</span>
+                                        ${col.name}
+                                    </div>
+
+                                    ${col.type === 'ai-field' ? `
+                                        <div class="ai-section">
+                                            ${row.cells[col.id] ? `
+                                                <div class="ai-result">${row.cells[col.id]}</div>
+                                            ` : `
+                                                <div class="form-group">
+                                                    <label>Provider</label>
+                                                    <select id="aiProvider">
+                                                        ${Object.keys(AI_MODELS).map(p => `
+                                                            <option value="${p}">${p.charAt(0).toUpperCase() + p.slice(1)}</option>
+                                                        `).join('')}
+                                                    </select>
+                                                </div>
+
+                                                <div class="form-group">
+                                                    <label>Model</label>
+                                                    <select id="aiModel">
+                                                        ${AI_MODELS.anthropic.map(m => `
+                                                            <option value="${m.id}">${m.label}</option>
+                                                        `).join('')}
+                                                    </select>
+                                                </div>
+
+                                                <div class="form-group">
+                                                    <label>Instructions</label>
+                                                    <textarea id="aiPrompt" placeholder="Write your prompt..."></textarea>
+                                                </div>
+
+                                                <button class="btn btn-primary" id="generateBtn" style="width: 100%;">✨ Generate</button>
+                                            `}
+                                        </div>
+                                    ` : col.type === 'text-long' ? `
+                                        <textarea id="field-${col.id}" data-col-id="${col.id}">${row.cells[col.id] || ''}</textarea>
+                                    ` : col.type === 'date' ? `
+                                        <input type="date" id="field-${col.id}" data-col-id="${col.id}" value="${row.cells[col.id] || ''}">
+                                    ` : col.type === 'number' ? `
+                                        <input type="number" id="field-${col.id}" data-col-id="${col.id}" value="${row.cells[col.id] || ''}">
+                                    ` : col.type === 'select-single' ? `
+                                        <select id="field-${col.id}" data-col-id="${col.id}">
+                                            <option value="">Select...</option>
+                                            <option value="Easy">Easy</option>
+                                            <option value="Medium">Medium</option>
+                                            <option value="Hard">Hard</option>
+                                            <option value="Grade-1">Grade-1</option>
+                                            <option value="Grade-2">Grade-2</option>
+                                            <option value="EVS">EVS</option>
+                                            <option value="Math">Math</option>
+                                        </select>
+                                    ` : `
+                                        <input type="text" id="field-${col.id}" data-col-id="${col.id}" value="${row.cells[col.id] || ''}">
+                                    `}
+                                </div>
+                            `).join('')}
+                        </div>
+
+                        <div class="panel-footer">
+                            <button class="btn btn-primary" id="savePanelBtn">Save</button>
+                            <button class="btn" id="cancelPanelBtn">Cancel</button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            attachLoginHandlers() {
+                const form = document.getElementById('loginForm');
+                const showApiKeys = document.getElementById('showApiKeys');
+                const apiKeysSection = document.getElementById('apiKeysSection');
+
+                showApiKeys.addEventListener('change', () => {
+                    apiKeysSection.style.display = showApiKeys.checked ? 'block' : 'none';
+                });
+
+                form.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const email = document.getElementById('email').value;
+                    const name = document.getElementById('name').value;
+                    const apiKeys = {};
+
+                    document.querySelectorAll('.api-key-input').forEach(input => {
+                        const provider = input.dataset.provider;
+                        apiKeys[provider] = input.value;
+                    });
+
+                    this.handleLogin(email, name, apiKeys);
+                });
+            }
+
+            attachAppHandlers() {
+                if (this.error) {
+                    document.querySelector('.error-banner .close-btn')?.addEventListener('click', () => {
+                        this.error = null;
+                        this.render();
+                    });
+                }
+
+                document.querySelectorAll('.page-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        this.currentPage = btn.dataset.page;
+                        this.expandedCell = null;
+                        this.render();
+                    });
+                });
+
+                document.getElementById('addRowBtn').addEventListener('click', () => this.handleAddRow());
+                document.getElementById('exportBtn').addEventListener('click', () => this.handleExport());
+                document.getElementById('logoutBtn').addEventListener('click', () => {
+                    this.logoutSession();
+                    this.render();
+                });
+
+                document.querySelectorAll('td[data-row-id]').forEach(cell => {
+                    cell.addEventListener('click', () => {
+                        this.expandedCell = {
+                            rowId: cell.dataset.rowId,
+                            colId: cell.dataset.colId
+                        };
+                        this.render();
+                    });
+                });
+
+                document.querySelectorAll('.delete-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const rowId = btn.dataset.rowId;
+                        if (confirm('Delete this row?')) {
+                            this.handleDeleteRow(rowId);
+                        }
+                    });
+                });
+
+                if (this.expandedCell) {
+                    document.getElementById('closePanelBtn')?.addEventListener('click', () => {
+                        this.expandedCell = null;
+                        this.render();
+                    });
+
+                    document.getElementById('savePanelBtn')?.addEventListener('click', () => {
+                        const row = this.pages[this.currentPage].rows.find(r => r.id === this.expandedCell.rowId);
+                        if (row) {
+                            document.querySelectorAll('[data-col-id]').forEach(input => {
+                                const colId = input.dataset.colId;
+                                row.cells[colId] = input.value;
+                            });
+                            
+                            const aiResult = document.querySelector('.ai-result');
+                            if (aiResult) {
+                                const col = this.pages[this.currentPage].columns.find(c => c.type === 'ai-field');
+                                if (col) {
+                                    row.cells[col.id] = aiResult.textContent;
+                                }
+                            }
+
+                            this.saveData('pages', this.pages);
+                            this.expandedCell = null;
+                            this.render();
+                        }
+                    });
+
+                    document.getElementById('cancelPanelBtn')?.addEventListener('click', () => {
+                        this.expandedCell = null;
+                        this.render();
+                    });
+
+                    document.getElementById('generateBtn')?.addEventListener('click', async () => {
+                        const provider = document.getElementById('aiProvider').value;
+                        const prompt = document.getElementById('aiPrompt').value;
+                        const btn = document.getElementById('generateBtn');
+                        
+                        if (!prompt.trim()) {
+                            alert('Please enter a prompt');
+                            return;
+                        }
+
+                        btn.disabled = true;
+                        btn.innerHTML = '<span class="spin">⟳</span> Generating...';
+
+                        try {
+                            const response = await fetch('/.netlify/functions/ai-proxy', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    provider,
+                                    model: document.getElementById('aiModel').value,
+                                    prompt,
+                                    apiKey: this.user.apiKeys[provider]
+                                })
+                            });
+
+                            if (response.ok) {
+                                const data = await response.json();
+                                const resultDiv = document.createElement('div');
+                                resultDiv.className = 'ai-result';
+                                resultDiv.textContent = data.content;
+                                btn.parentElement.replaceChild(resultDiv, btn.nextElementSibling);
+                                btn.style.display = 'none';
+                            } else {
+                                alert('Generation failed');
+                                btn.disabled = false;
+                                btn.innerHTML = '✨ Generate';
+                            }
+                        } catch (err) {
+                            console.error(err);
+                            alert('Error: ' + err.message);
+                            btn.disabled = false;
+                            btn.innerHTML = '✨ Generate';
+                        }
+                    });
+
+                    document.getElementById('aiProvider')?.addEventListener('change', (e) => {
+                        const provider = e.target.value;
+                        const modelSelect = document.getElementById('aiModel');
+                        modelSelect.innerHTML = AI_MODELS[provider].map(m => 
+                            `<option value="${m.id}">${m.label}</option>`
+                        ).join('');
+                    });
+                }
+            }
+        }
+
+        const app = new App();
+    </script>
+</body>
+</html>
