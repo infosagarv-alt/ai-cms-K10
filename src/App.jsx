@@ -1,49 +1,41 @@
 import React, { useState, useEffect } from 'react'
 
-const FIELD_TYPES = {
-  'text-short': { label: 'Short Text', icon: 'A' },
-  'text-long': { label: 'Long Text', icon: '¶' },
-  'select-single': { label: 'Single Select', icon: '▼' },
-  'ai-field': { label: 'AI Field', icon: '✨' },
-  'date': { label: 'Date', icon: '📅' },
-  'number': { label: 'Number', icon: '#' }
+const GRADES = ['Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12']
+
+const SUBJECTS = {
+  'Grade 1-5': ['English', 'Hindi', 'Mathematics', 'Science', 'Social Studies'],
+  'Grade 6-8': ['English', 'Hindi', 'Mathematics', 'Science', 'Social Studies', 'Sanskrit'],
+  'Grade 9-10': ['English', 'Hindi', 'Mathematics', 'Science', 'Social Studies', 'Sanskrit', 'Economics'],
+  'Grade 11-12': ['English', 'Hindi', 'Mathematics', 'Physics', 'Chemistry', 'Biology', 'History', 'Geography', 'Political Science', 'Economics', 'Accountancy', 'Business Studies']
 }
 
-const DEFAULT_PAGES = {
-  textbook: { name: 'Textbook', columns: [], rows: [] },
-  questions: { name: 'Questions', columns: [], rows: [] },
-  'lesson-plans': { name: 'Lesson Plans', columns: [], rows: [] }
-}
+const CONTENT_TYPES = ['Lesson Plan', 'Questions', 'Textbook', 'Summary', 'Quiz']
 
-const AI_PROVIDERS = {
-  anthropic: 'Claude (Anthropic)',
-  openai: 'ChatGPT (OpenAI)',
-  google: 'Gemini (Google)',
-  deepseek: 'DeepSeek'
-}
+const AI_MODELS = ['Claude (Anthropic)', 'ChatGPT (OpenAI)', 'DeepSeek', 'Gemini (Google)']
+
+const VARIABLES = [
+  { label: 'Class', value: '{class}' },
+  { label: 'Subject', value: '{subject}' },
+  { label: 'Topic', value: '{topic}' },
+  { label: 'Subtopic', value: '{subtopic}' }
+]
 
 export default function App() {
   const [user, setUser] = useState(null)
-  const [pages, setPages] = useState(DEFAULT_PAGES)
-  const [currentPage, setCurrentPage] = useState('textbook')
-  const [expandedCell, setExpandedCell] = useState(null)
   const [error, setError] = useState(null)
   const [sessionSeconds, setSessionSeconds] = useState(24 * 60 * 60)
-  const [db, setDb] = useState(null)
-  const [showColumnConfig, setShowColumnConfig] = useState(false)
-  const [newColConfig, setNewColConfig] = useState({ name: '', type: 'text-short', options: [] })
 
-  // Initialize IndexedDB
-  useEffect(() => {
-    const request = indexedDB.open('aiCMS', 1)
-    request.onsuccess = () => setDb(request.result)
-    request.onupgradeneeded = (e) => {
-      const database = e.target.result
-      if (!database.objectStoreNames.contains('workspace')) {
-        database.createObjectStore('workspace', { keyPath: 'id' })
-      }
-    }
-  }, [])
+  // Form states
+  const [selectedClass, setSelectedClass] = useState('')
+  const [selectedSubject, setSelectedSubject] = useState('')
+  const [topic, setTopic] = useState('')
+  const [subtopic, setSubtopic] = useState('')
+  const [prompt, setPrompt] = useState('')
+  const [selectedModel, setSelectedModel] = useState('Claude (Anthropic)')
+  const [selectedContentType, setSelectedContentType] = useState('Lesson Plan')
+  const [output, setOutput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [apiKeys, setApiKeys] = useState({})
 
   // Load session
   useEffect(() => {
@@ -55,15 +47,11 @@ export default function App() {
 
       if (remaining > 0) {
         setUser(session.user)
+        setApiKeys(session.user.apiKeys || {})
         setSessionSeconds(Math.floor(remaining / 1000))
       } else {
         localStorage.removeItem('cms_session')
       }
-    }
-
-    const stored_pages = localStorage.getItem('cms_pages')
-    if (stored_pages) {
-      setPages(JSON.parse(stored_pages))
     }
   }, [])
 
@@ -84,20 +72,11 @@ export default function App() {
     return () => clearInterval(interval)
   }, [user])
 
-  // Auto-save pages
-  useEffect(() => {
-    localStorage.setItem('cms_pages', JSON.stringify(pages))
-    if (db) {
-      const tx = db.transaction('workspace', 'readwrite')
-      const store = tx.objectStore('workspace')
-      store.put({ id: 'pages', data: pages, timestamp: Date.now() })
-    }
-  }, [pages, db])
-
-  const handleLogin = (email, name, apiKeys) => {
-    const session = { user: { email, name, apiKeys }, createdAt: Date.now() }
+  const handleLogin = (email, name, keys) => {
+    const session = { user: { email, name, apiKeys: keys }, createdAt: Date.now() }
     localStorage.setItem('cms_session', JSON.stringify(session))
     setUser(session.user)
+    setApiKeys(keys)
     setSessionSeconds(24 * 60 * 60)
     setError(null)
   }
@@ -108,102 +87,17 @@ export default function App() {
     setSessionSeconds(24 * 60 * 60)
   }
 
-  const addColumn = () => {
-    if (!newColConfig.name.trim()) {
-      alert('Column name is required')
-      return
-    }
-
-    const col = {
-      id: `col-${Date.now()}`,
-      name: newColConfig.name,
-      type: newColConfig.type,
-      options: newColConfig.type === 'select-single' ? newColConfig.options : null
-    }
-
-    setPages(prev => ({
-      ...prev,
-      [currentPage]: {
-        ...prev[currentPage],
-        columns: [...prev[currentPage].columns, col]
-      }
-    }))
-
-    setShowColumnConfig(false)
-    setNewColConfig({ name: '', type: 'text-short', options: [] })
+  const getSubjects = () => {
+    if (!selectedClass) return []
+    const gradeNum = parseInt(selectedClass.split(' ')[1])
+    if (gradeNum <= 5) return SUBJECTS['Grade 1-5']
+    if (gradeNum <= 8) return SUBJECTS['Grade 6-8']
+    if (gradeNum <= 10) return SUBJECTS['Grade 9-10']
+    return SUBJECTS['Grade 11-12']
   }
 
-  const editColumn = (colId) => {
-    const col = pages[currentPage].columns.find(c => c.id === colId)
-    const newName = prompt('New column name:', col.name)
-    if (newName && newName.trim()) {
-      setPages(prev => ({
-        ...prev,
-        [currentPage]: {
-          ...prev[currentPage],
-          columns: prev[currentPage].columns.map(c =>
-            c.id === colId ? { ...c, name: newName } : c
-          )
-        }
-      }))
-    }
-  }
-
-  const deleteColumn = (colId) => {
-    if (window.confirm('Delete this column and all its data?')) {
-      setPages(prev => ({
-        ...prev,
-        [currentPage]: {
-          ...prev[currentPage],
-          columns: prev[currentPage].columns.filter(c => c.id !== colId)
-        }
-      }))
-    }
-  }
-
-  const addRow = () => {
-    const newRow = {
-      id: `row-${Date.now()}`,
-      cells: {},
-      createdBy: user.email,
-      createdAt: new Date().toISOString()
-    }
-
-    pages[currentPage].columns.forEach(col => {
-      newRow.cells[col.id] = ''
-    })
-
-    setPages(prev => ({
-      ...prev,
-      [currentPage]: {
-        ...prev[currentPage],
-        rows: [...prev[currentPage].rows, newRow]
-      }
-    }))
-  }
-
-  const deleteRow = (rowId) => {
-    if (window.confirm('Delete this row?')) {
-      setPages(prev => ({
-        ...prev,
-        [currentPage]: {
-          ...prev[currentPage],
-          rows: prev[currentPage].rows.filter(r => r.id !== rowId)
-        }
-      }))
-    }
-  }
-
-  const updateCell = (rowId, colId, value) => {
-    setPages(prev => ({
-      ...prev,
-      [currentPage]: {
-        ...prev[currentPage],
-        rows: prev[currentPage].rows.map(r =>
-          r.id === rowId ? { ...r, cells: { ...r.cells, [colId]: value } } : r
-        )
-      }
-    }))
+  const insertVariable = (variable) => {
+    setPrompt(prompt + ' ' + variable.value)
   }
 
   const formatTime = (seconds) => {
@@ -212,32 +106,78 @@ export default function App() {
     return `${hours}h ${mins}m`
   }
 
-  const handleExport = () => {
-    const page = pages[currentPage]
-    let content = '| ' + page.columns.map(c => c.name).join(' | ') + ' |\n'
-    content += '| ' + page.columns.map(() => '---').join(' | ') + ' |\n'
+  const getModelProvider = (model) => {
+    if (model.includes('Claude')) return 'anthropic'
+    if (model.includes('ChatGPT')) return 'openai'
+    if (model.includes('DeepSeek')) return 'deepseek'
+    if (model.includes('Gemini')) return 'google'
+    return 'anthropic'
+  }
 
-    page.rows.forEach(row => {
-      content += '| ' + page.columns.map(c => (row.cells[c.id] || '').replace(/\|/g, '\\|')).join(' | ') + ' |\n'
-    })
+  const handleGenerate = async () => {
+    if (!selectedClass || !selectedSubject || !topic || !prompt) {
+      setError('Please fill in: Class, Subject, Topic, and Prompt')
+      return
+    }
 
-    const blob = new Blob([content], { type: 'text/markdown' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `export-${currentPage}-${Date.now()}.md`
-    a.click()
-    URL.revokeObjectURL(url)
+    const provider = getModelProvider(selectedModel)
+    if (!apiKeys[provider]) {
+      setError(`API key not configured for ${selectedModel}. Please add it in login.`)
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const fullPrompt = `
+Content Type: ${selectedContentType}
+Class: ${selectedClass}
+Subject: ${selectedSubject}
+Topic: ${topic}
+${subtopic ? `Subtopic: ${subtopic}` : ''}
+
+User Prompt: ${prompt}
+
+Please generate the ${selectedContentType.toLowerCase()} based on the above information.
+      `.trim()
+
+      const response = await fetch('/.netlify/functions/ai-proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider,
+          prompt: fullPrompt,
+          apiKey: apiKeys[provider]
+        })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.content) {
+          setOutput(data.content)
+        } else {
+          setError('No content generated')
+        }
+      } else {
+        const errorData = await response.json()
+        setError('Generation failed: ' + (errorData.error || 'Unknown error'))
+      }
+    } catch (err) {
+      setError('Error: ' + err.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   if (!user) {
     return <LoginScreen onLogin={handleLogin} error={error} />
   }
 
-  const page = pages[currentPage]
+  const subjects = getSubjects()
 
   return (
-    <div className="app-container">
+    <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
       {error && (
         <div className="error-banner">
           <span>{error}</span>
@@ -245,129 +185,188 @@ export default function App() {
         </div>
       )}
 
-      <div className="sidebar">
-        <h3>Pages</h3>
-        {Object.entries(pages).map(([key, p]) => (
-          <button
-            key={key}
-            className={`page-btn ${currentPage === key ? 'active' : ''}`}
-            onClick={() => {
-              setCurrentPage(key)
-              setExpandedCell(null)
-            }}
-          >
-            {p.name}
+      {/* Header */}
+      <div style={{ padding: '1.5rem', backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h1 style={{ fontSize: '24px', fontWeight: '600', margin: '0 0 0.25rem 0' }}>AI Content Generator</h1>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>
+              {user.email} • {formatTime(sessionSeconds)} remaining
+            </p>
+          </div>
+          <button className="btn btn-sm" onClick={handleLogout}>
+            Logout
           </button>
-        ))}
+        </div>
       </div>
 
-      <div className="main-content">
-        <div className="header">
-          <div className="header-left">
-            <h2>{page.name}</h2>
-            <p>{user.email} • {formatTime(sessionSeconds)} remaining • {page.columns.length} columns • {page.rows.length} rows</p>
-          </div>
-          <div className="header-right">
-            <button className="btn btn-primary btn-sm" onClick={() => setShowColumnConfig(true)}>
-              + Column
-            </button>
-            <button className="btn btn-primary btn-sm" onClick={addRow}>
-              + Row
-            </button>
-            <button className="btn btn-sm" onClick={handleExport}>
-              Export
-            </button>
-            <button className="btn btn-sm" onClick={handleLogout}>
-              Logout
-            </button>
-          </div>
-        </div>
+      {/* Main Container */}
+      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '2rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+        
+        {/* LEFT SIDE - INPUTS */}
+        <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+          <h2 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '1.5rem' }}>📝 Inputs</h2>
 
-        <div className="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: '40px' }}>#</th>
-                {page.columns.map(col => (
-                  <th key={col.id} id={`col-${col.id}`}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span>{FIELD_TYPES[col.type]?.icon || '•'}</span>
-                        <span>{col.name}</span>
-                      </div>
-                      <div style={{ display: 'flex', gap: '0.25rem' }}>
-                        <button
-                          className="btn"
-                          style={{ padding: '0.3rem 0.6rem', fontSize: '12px' }}
-                          onClick={() => editColumn(col.id)}
-                          title="Edit column name"
-                        >
-                          ✎
-                        </button>
-                        <button
-                          className="btn"
-                          style={{ padding: '0.3rem 0.6rem', fontSize: '12px', color: 'var(--danger)' }}
-                          onClick={() => deleteColumn(col.id)}
-                          title="Delete column"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </div>
-                  </th>
-                ))}
-                <th style={{ width: '40px' }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {page.rows.map((row, idx) => (
-                <tr key={row.id}>
-                  <td style={{ width: '40px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
-                    {idx + 1}
-                  </td>
-                  {page.columns.map(col => (
-                    <td
-                      key={`${row.id}-${col.id}`}
-                      onClick={() => setExpandedCell({ rowId: row.id, colId: col.id })}
-                    >
-                      {(row.cells[col.id] || '').substring(0, 50)}
-                    </td>
-                  ))}
-                  <td style={{ width: '40px', textAlign: 'center' }}>
-                    <button
-                      className="btn"
-                      style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '16px' }}
-                      onClick={() => deleteRow(row.id)}
-                    >
-                      ✕
-                    </button>
-                  </td>
-                </tr>
+          {/* Class */}
+          <div className="form-group">
+            <label>Class *</label>
+            <select value={selectedClass} onChange={(e) => {
+              setSelectedClass(e.target.value)
+              setSelectedSubject('')
+            }}>
+              <option value="">Select Class</option>
+              {GRADES.map(g => (
+                <option key={g} value={g}>{g}</option>
               ))}
-            </tbody>
-          </table>
+            </select>
+          </div>
+
+          {/* Subject */}
+          <div className="form-group">
+            <label>Subject *</label>
+            <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} disabled={!selectedClass}>
+              <option value="">Select Subject</option>
+              {subjects.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Topic */}
+          <div className="form-group">
+            <label>Topic *</label>
+            <input
+              type="text"
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              placeholder="e.g., Photosynthesis, Democracy, Fractions"
+            />
+          </div>
+
+          {/* Subtopic */}
+          <div className="form-group">
+            <label>Subtopic (Optional)</label>
+            <input
+              type="text"
+              value={subtopic}
+              onChange={(e) => setSubtopic(e.target.value)}
+              placeholder="e.g., Light Reactions"
+            />
+          </div>
+
+          {/* Prompt */}
+          <div className="form-group">
+            <label>Prompt *</label>
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="Describe what you want to generate..."
+              style={{ minHeight: '120px' }}
+            />
+          </div>
+
+          {/* Variable Buttons */}
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Quick Variables</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+              {VARIABLES.map(v => (
+                <button
+                  key={v.value}
+                  className="btn btn-sm"
+                  onClick={() => insertVariable(v)}
+                  style={{ fontSize: '11px' }}
+                >
+                  + {v.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* AI Model */}
+          <div className="form-group">
+            <label>AI Model *</label>
+            <select value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)}>
+              {AI_MODELS.map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Content Type */}
+          <div className="form-group">
+            <label>Content Type *</label>
+            <select value={selectedContentType} onChange={(e) => setSelectedContentType(e.target.value)}>
+              {CONTENT_TYPES.map(ct => (
+                <option key={ct} value={ct}>{ct}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Generate Button */}
+          <button
+            className="btn btn-primary"
+            onClick={handleGenerate}
+            disabled={loading}
+            style={{ width: '100%', padding: '0.75rem', marginTop: '1rem', fontSize: '14px', fontWeight: '500' }}
+          >
+            {loading ? '⟳ Generating...' : '✨ Generate Content'}
+          </button>
+        </div>
+
+        {/* RIGHT SIDE - OUTPUT */}
+        <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
+          <h2 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '1.5rem' }}>📄 Output</h2>
+          
+          <textarea
+            value={output}
+            readOnly
+            placeholder="Generated content will appear here..."
+            style={{
+              flex: 1,
+              padding: '1rem',
+              backgroundColor: 'var(--bg-primary)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)',
+              fontFamily: 'monospace',
+              fontSize: '13px',
+              color: 'var(--text-primary)',
+              resize: 'none',
+              lineHeight: '1.6'
+            }}
+          />
+
+          {/* Copy & Download Buttons */}
+          {output && (
+            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(output)
+                  alert('Copied to clipboard!')
+                }}
+                style={{ flex: 1 }}
+              >
+                📋 Copy
+              </button>
+              <button
+                className="btn btn-sm"
+                onClick={() => {
+                  const blob = new Blob([output], { type: 'text/plain' })
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = `content-${Date.now()}.txt`
+                  a.click()
+                  URL.revokeObjectURL(url)
+                }}
+                style={{ flex: 1 }}
+              >
+                💾 Download
+              </button>
+            </div>
+          )}
         </div>
       </div>
-
-      {showColumnConfig && (
-        <ColumnConfigModal
-          config={newColConfig}
-          setConfig={setNewColConfig}
-          onAdd={addColumn}
-          onClose={() => setShowColumnConfig(false)}
-        />
-      )}
-
-      {expandedCell && (
-        <CellPanel
-          row={pages[currentPage].rows.find(r => r.id === expandedCell.rowId)}
-          column={pages[currentPage].columns.find(c => c.id === expandedCell.colId)}
-          onUpdate={(value) => updateCell(expandedCell.rowId, expandedCell.colId, value)}
-          onClose={() => setExpandedCell(null)}
-          apiKeys={user.apiKeys}
-          setError={setError}
-        />
-      )}
     </div>
   )
 }
@@ -376,7 +375,12 @@ function LoginScreen({ onLogin, error }) {
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [showApiKeys, setShowApiKeys] = useState(false)
-  const [apiKeys, setApiKeys] = useState({})
+  const [apiKeys, setApiKeys] = useState({
+    anthropic: '',
+    openai: '',
+    deepseek: '',
+    google: ''
+  })
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -390,8 +394,8 @@ function LoginScreen({ onLogin, error }) {
   return (
     <div className="modal-overlay">
       <div className="modal">
-        <h1>AI Content Studio Pro</h1>
-        <p>Professional K-12 content management with Lark Base-like features.</p>
+        <h1>🎓 AI Content Studio</h1>
+        <p>Professional AI-powered content generation for CBSE K-12 education.</p>
 
         {error && <div style={{ padding: '0.75rem', backgroundColor: 'var(--danger)', color: 'white', borderRadius: 'var(--radius)', marginBottom: '1rem', fontSize: '13px' }}>{error}</div>}
 
@@ -409,272 +413,58 @@ function LoginScreen({ onLogin, error }) {
           <div className="form-group">
             <label>
               <input type="checkbox" checked={showApiKeys} onChange={(e) => setShowApiKeys(e.target.checked)} />
-              {' '}Add API Keys for AI Features (Optional)
+              {' '}Add API Keys for AI (Required)
             </label>
           </div>
 
           {showApiKeys && (
-            <div style={{ marginBottom: '1rem' }}>
-              {Object.entries(AI_PROVIDERS).map(([key, label]) => (
-                <div key={key} className="form-group">
-                  <label>{label} API Key</label>
-                  <input
-                    type="password"
-                    placeholder={`Enter ${label} API key`}
-                    onChange={(e) => setApiKeys(prev => ({ ...prev, [key]: e.target.value }))}
-                  />
-                </div>
-              ))}
+            <div style={{ marginBottom: '1rem', padding: '1rem', backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius)' }}>
+              <div className="form-group">
+                <label>Claude API Key (Anthropic)</label>
+                <input
+                  type="password"
+                  value={apiKeys.anthropic}
+                  onChange={(e) => setApiKeys(prev => ({ ...prev, anthropic: e.target.value }))}
+                  placeholder="sk-..."
+                />
+              </div>
+
+              <div className="form-group">
+                <label>OpenAI API Key</label>
+                <input
+                  type="password"
+                  value={apiKeys.openai}
+                  onChange={(e) => setApiKeys(prev => ({ ...prev, openai: e.target.value }))}
+                  placeholder="sk-..."
+                />
+              </div>
+
+              <div className="form-group">
+                <label>DeepSeek API Key</label>
+                <input
+                  type="password"
+                  value={apiKeys.deepseek}
+                  onChange={(e) => setApiKeys(prev => ({ ...prev, deepseek: e.target.value }))}
+                  placeholder="sk-..."
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Google Gemini API Key</label>
+                <input
+                  type="password"
+                  value={apiKeys.google}
+                  onChange={(e) => setApiKeys(prev => ({ ...prev, google: e.target.value }))}
+                  placeholder="AIza..."
+                />
+              </div>
             </div>
           )}
 
           <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '0.75rem' }}>
-            Start Session
+            Start Generating
           </button>
         </form>
-      </div>
-    </div>
-  )
-}
-
-function ColumnConfigModal({ config, setConfig, onAdd, onClose }) {
-  const [optionInput, setOptionInput] = useState('')
-
-  const addOption = () => {
-    if (optionInput.trim()) {
-      setConfig(prev => ({
-        ...prev,
-        options: [...prev.options, optionInput]
-      }))
-      setOptionInput('')
-    }
-  }
-
-  return (
-    <div className="modal-overlay">
-      <div className="modal">
-        <h1>Create New Column</h1>
-
-        <div className="form-group">
-          <label>Column Name *</label>
-          <input
-            type="text"
-            value={config.name}
-            onChange={(e) => setConfig(prev => ({ ...prev, name: e.target.value }))}
-            placeholder="e.g., Topic, Question, Grade Level"
-          />
-        </div>
-
-        <div className="form-group">
-          <label>Field Type *</label>
-          <select value={config.type} onChange={(e) => setConfig(prev => ({ ...prev, type: e.target.value, options: [] }))}>
-            {Object.entries(FIELD_TYPES).map(([key, val]) => (
-              <option key={key} value={key}>{val.label}</option>
-            ))}
-          </select>
-        </div>
-
-        {config.type === 'select-single' && (
-          <div className="form-group">
-            <label>Options</label>
-            <div style={{ marginBottom: '0.5rem' }}>
-              {config.options.map((opt, idx) => (
-                <div key={idx} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                  <input type="text" value={opt} disabled style={{ flex: 1 }} />
-                  <button
-                    type="button"
-                    className="btn btn-sm"
-                    onClick={() => setConfig(prev => ({
-                      ...prev,
-                      options: prev.options.filter((_, i) => i !== idx)
-                    }))}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <input
-                type="text"
-                value={optionInput}
-                onChange={(e) => setOptionInput(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && addOption()}
-                placeholder="Add option"
-              />
-              <button type="button" className="btn btn-primary btn-sm" onClick={addOption}>
-                Add
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <button className="btn btn-primary" onClick={onAdd} style={{ flex: 1 }}>
-            Create Column
-          </button>
-          <button className="btn" onClick={onClose} style={{ flex: 1 }}>
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function CellPanel({ row, column, onUpdate, onClose, apiKeys, setError }) {
-  const [value, setValue] = useState(row.cells[column.id] || '')
-  const [aiLoading, setAiLoading] = useState(false)
-  const [aiResult, setAiResult] = useState(null)
-  const [aiProvider, setAiProvider] = useState('anthropic')
-  const [aiPrompt, setAiPrompt] = useState('')
-
-  const handleSave = () => {
-    onUpdate(value)
-    onClose()
-  }
-
-  const handleAIGenerate = async () => {
-    if (!aiPrompt.trim()) {
-      alert('Please enter a prompt')
-      return
-    }
-
-    if (!apiKeys || !apiKeys[aiProvider]) {
-      setError('API key not configured for ' + AI_PROVIDERS[aiProvider] + '. Please add it in login settings.')
-      return
-    }
-
-    setAiLoading(true)
-    try {
-      const response = await fetch('/.netlify/functions/ai-proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          provider: aiProvider,
-          prompt: aiPrompt,
-          apiKey: apiKeys[aiProvider]
-        })
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        if (data.content) {
-          setAiResult(data.content)
-          setValue(data.content)
-        } else {
-          setError('No content generated')
-        }
-      } else {
-        const errorData = await response.json()
-        setError('Generation failed: ' + (errorData.error || 'Unknown error'))
-      }
-    } catch (err) {
-      setError('Error: ' + err.message)
-    } finally {
-      setAiLoading(false)
-    }
-  }
-
-  if (!column) return null
-
-  return (
-    <div className="panel">
-      <div className="panel-header">
-        <h3>{column.name}</h3>
-        <button className="close-btn" onClick={onClose}>✕</button>
-      </div>
-
-      <div className="panel-content">
-        <div className="field">
-          <div className="field-label">
-            {FIELD_TYPES[column.type]?.label}
-          </div>
-
-          {column.type === 'text-short' && (
-            <input
-              type="text"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder="Enter text"
-            />
-          )}
-
-          {column.type === 'text-long' && (
-            <textarea
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder="Enter text"
-            />
-          )}
-
-          {column.type === 'date' && (
-            <input
-              type="date"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-            />
-          )}
-
-          {column.type === 'number' && (
-            <input
-              type="number"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder="Enter number"
-            />
-          )}
-
-          {column.type === 'select-single' && (
-            <select value={value} onChange={(e) => setValue(e.target.value)}>
-              <option value="">Select...</option>
-              {column.options?.map(opt => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
-          )}
-
-          {column.type === 'ai-field' && (
-            <div className="ai-section">
-              {aiResult && (
-                <div className="ai-result">{aiResult}</div>
-              )}
-              <div className="form-group">
-                <label>AI Provider</label>
-                <select value={aiProvider} onChange={(e) => setAiProvider(e.target.value)}>
-                  {Object.entries(AI_PROVIDERS).map(([key, label]) => (
-                    <option key={key} value={key}>{label}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Prompt</label>
-                <textarea
-                  value={aiPrompt}
-                  onChange={(e) => setAiPrompt(e.target.value)}
-                  placeholder="Write your prompt..."
-                />
-              </div>
-              <button
-                className="btn btn-primary"
-                onClick={handleAIGenerate}
-                disabled={aiLoading}
-                style={{ width: '100%' }}
-              >
-                {aiLoading ? '⟳ Generating...' : '✨ Generate'}
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="panel-footer">
-        <button className="btn btn-primary" onClick={handleSave}>
-          Save
-        </button>
-        <button className="btn" onClick={onClose}>
-          Cancel
-        </button>
       </div>
     </div>
   )
