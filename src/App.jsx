@@ -11,8 +11,7 @@ const SUBJECTS = {
     'Social Studies',
     'Sanskrit',
     'Urdu',
-    'Computer Science',
-    'EVS'
+    'Computer Science'
   ],
   'Grade 6-8': [
     'English',
@@ -188,6 +187,7 @@ export default function App() {
       contentType: newRowContentType,
       aiModel: newRowModel,
       output: '',
+      remark: '',
       loading: false
     }
 
@@ -198,6 +198,22 @@ export default function App() {
 
   const deleteRow = (id) => {
     setRows(rows.filter(r => r.id !== id))
+  }
+
+  const updateRowRemark = (id, remark) => {
+    setRows(prevRows =>
+      prevRows.map(r =>
+        r.id === id ? { ...r, remark } : r
+      )
+    )
+  }
+
+  const insertVariable = (id, variable) => {
+    setRows(prevRows =>
+      prevRows.map(r =>
+        r.id === id ? { ...r, prompt: r.prompt + ' ' + variable } : r
+      )
+    )
   }
 
   const generateRow = async (id) => {
@@ -226,7 +242,9 @@ Topic: ${row.topic}
 
 Prompt: ${row.prompt}
 
-Please generate the ${row.contentType.toLowerCase()} content based on the above requirements. Follow CBSE curriculum guidelines and provide comprehensive, well-structured content suitable for the specified class and subject. Ensure the content is educational, accurate, and engaging.
+Please generate comprehensive ${row.contentType.toLowerCase()} content based on the above requirements. 
+Follow CBSE curriculum guidelines and provide detailed, well-structured content suitable for the specified class and subject. 
+The content should be educational, accurate, engaging, and at least 2000 words if possible.
       `.trim()
 
       const response = await fetch('/.netlify/functions/ai-proxy', {
@@ -293,8 +311,9 @@ Please generate the ${row.contentType.toLowerCase()} content based on the above 
       content += `| Class | ${row.class} |\n`
       content += `| Subject | ${row.subject} |\n`
       content += `| Content Type | ${row.contentType} |\n`
-      content += `| AI Model | ${row.aiModel} |\n\n`
-      content += `### Content:\n\n${row.output}\n\n---\n\n`
+      content += `| AI Model | ${row.aiModel} |\n`
+      if (row.remark) content += `| Remark | ${row.remark} |\n`
+      content += `\n### Content:\n\n${row.output}\n\n---\n\n`
     })
 
     const blob = new Blob([content], { type: 'text/markdown' })
@@ -304,6 +323,89 @@ Please generate the ${row.contentType.toLowerCase()} content based on the above 
     a.download = `ai-content-${Date.now()}.md`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  const exportAllPDF = async () => {
+    const successRows = rows.filter(r => r.output)
+    if (successRows.length === 0) {
+      alert('No generated content to export')
+      return
+    }
+
+    try {
+      const { jsPDF } = await import('jspdf')
+      const doc = new jsPDF()
+
+      let yPosition = 20
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const pageHeight = doc.internal.pageSize.getHeight()
+      const margin = 15
+      const maxWidth = pageWidth - 2 * margin
+
+      // Title
+      doc.setFontSize(16)
+      doc.text('AI Generated Educational Content', margin, yPosition)
+      yPosition += 10
+
+      // Date
+      doc.setFontSize(10)
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, margin, yPosition)
+      yPosition += 10
+
+      // Content
+      successRows.forEach((row, idx) => {
+        // Check if new page needed
+        if (yPosition > pageHeight - 60) {
+          doc.addPage()
+          yPosition = 20
+        }
+
+        // Row title
+        doc.setFontSize(12)
+        doc.setFont(undefined, 'bold')
+        doc.text(`${idx + 1}. ${row.topic}`, margin, yPosition)
+        yPosition += 8
+
+        // Metadata
+        doc.setFontSize(9)
+        doc.setFont(undefined, 'normal')
+        doc.text(`Class: ${row.class} | Subject: ${row.subject} | Type: ${row.contentType}`, margin, yPosition)
+        yPosition += 6
+        doc.text(`AI Model: ${row.aiModel}`, margin, yPosition)
+        yPosition += 6
+        if (row.remark) {
+          doc.text(`Remark: ${row.remark}`, margin, yPosition)
+          yPosition += 6
+        }
+
+        yPosition += 2
+
+        // Content
+        doc.setFontSize(10)
+        const splitContent = doc.splitTextToSize(row.output, maxWidth)
+        const contentHeight = splitContent.length * 4
+
+        // Check if content fits on current page
+        if (yPosition + contentHeight > pageHeight - 20) {
+          doc.addPage()
+          yPosition = 20
+        }
+
+        doc.text(splitContent, margin, yPosition)
+        yPosition += contentHeight + 10
+
+        // Separator
+        if (yPosition < pageHeight - 20) {
+          doc.setDrawColor(200, 200, 200)
+          doc.line(margin, yPosition, pageWidth - margin, yPosition)
+          yPosition += 8
+        }
+      })
+
+      doc.save(`ai-content-${Date.now()}.pdf`)
+    } catch (err) {
+      setError('PDF export error: ' + err.message)
+    }
   }
 
   const exportAllText = () => {
@@ -325,6 +427,7 @@ Please generate the ${row.contentType.toLowerCase()} content based on the above 
       content += `Subject: ${row.subject}\n`
       content += `Content Type: ${row.contentType}\n`
       content += `AI Model: ${row.aiModel}\n`
+      if (row.remark) content += `Remark: ${row.remark}\n`
       content += `Prompt: ${row.prompt}\n\n`
       content += `CONTENT:\n`
       content += `${row.output}\n\n`
@@ -373,6 +476,9 @@ Please generate the ${row.contentType.toLowerCase()} content based on the above 
             <button className="btn btn-sm" onClick={exportAllMarkdown} disabled={!rows.some(r => r.output)} title="Export all as Markdown">
               📄 MD
             </button>
+            <button className="btn btn-sm" onClick={exportAllPDF} disabled={!rows.some(r => r.output)} title="Export all as PDF">
+              📕 PDF
+            </button>
             <button className="btn btn-sm" onClick={exportAllText} disabled={!rows.some(r => r.output)} title="Export all as Text">
               📝 TXT
             </button>
@@ -390,7 +496,7 @@ Please generate the ${row.contentType.toLowerCase()} content based on the above 
         <div style={{ padding: '1rem', backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
           <h2 style={{ fontSize: '13px', fontWeight: '600', margin: '0 0 0.75rem 0' }}>📝 Add New Row</h2>
           
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: '0.5rem', marginBottom: '0.75rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.5rem', marginBottom: '0.75rem' }}>
             <select value={newRowClass} onChange={(e) => {
               setNewRowClass(e.target.value)
               setNewRowSubject('')
@@ -429,7 +535,7 @@ Please generate the ${row.contentType.toLowerCase()} content based on the above 
             </div>
           ) : (
             rows.map((row) => (
-              <div key={row.id} style={{ marginBottom: '1.5rem', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1rem' }}>
+              <div key={row.id} style={{ marginBottom: '2rem', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1rem' }}>
                 
                 {/* Row Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
@@ -440,8 +546,8 @@ Please generate the ${row.contentType.toLowerCase()} content based on the above 
                     </p>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
-                    <button className="btn btn-primary btn-sm" onClick={() => generateRow(row.id)} disabled={row.loading} style={{ padding: '0.4rem 0.8rem', fontSize: '12px', whiteSpace: 'nowrap' }}>
-                      {row.loading ? '⟳ Gen...' : '✨ Gen'}
+                    <button className="btn btn-primary btn-sm" onClick={() => generateRow(row.id)} disabled={row.loading} style={{ padding: '0.5rem 1rem', fontSize: '12px', whiteSpace: 'nowrap', fontWeight: '600' }}>
+                      {row.loading ? '⟳ Generating...' : '✨ Generate'}
                     </button>
                     {row.output && (
                       <button className="btn btn-sm" onClick={() => copyRowOutput(row.output)} style={{ padding: '0.4rem 0.6rem', fontSize: '12px', whiteSpace: 'nowrap' }}>
@@ -454,33 +560,51 @@ Please generate the ${row.contentType.toLowerCase()} content based on the above 
                   </div>
                 </div>
 
-                {/* Prompt */}
-                <div style={{ marginBottom: '1rem' }}>
-                  <p style={{ margin: 0, fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)' }}>PROMPT:</p>
-                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '12px', color: 'var(--text-primary)' }}>
-                    {row.prompt}
-                  </p>
+                {/* Grid: Prompt + Variables + Remark */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '1rem', marginBottom: '1rem' }}>
+                  {/* Prompt Section */}
+                  <div>
+                    <p style={{ margin: 0, fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>PROMPT:</p>
+                    <textarea value={row.prompt} onChange={(e) => setRows(prevRows => prevRows.map(r => r.id === row.id ? { ...r, prompt: e.target.value } : r))} style={{ width: '100%', minHeight: '80px', padding: '0.5rem', fontSize: '12px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--text-primary)', fontFamily: 'inherit' }} />
+                    
+                    {/* Variable Buttons */}
+                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                      <button className="btn btn-sm" onClick={() => insertVariable(row.id, `{${row.class}}`)} style={{ padding: '0.3rem 0.6rem', fontSize: '11px' }}>
+                        + Class
+                      </button>
+                      <button className="btn btn-sm" onClick={() => insertVariable(row.id, `{${row.subject}}`)} style={{ padding: '0.3rem 0.6rem', fontSize: '11px' }}>
+                        + Subject
+                      </button>
+                      <button className="btn btn-sm" onClick={() => insertVariable(row.id, `{${row.topic}}`)} style={{ padding: '0.3rem 0.6rem', fontSize: '11px' }}>
+                        + Topic
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Remark Section */}
+                  <div style={{ minWidth: '250px' }}>
+                    <p style={{ margin: 0, fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>REMARK:</p>
+                    <textarea value={row.remark} onChange={(e) => updateRowRemark(row.id, e.target.value)} placeholder="Add notes..." style={{ width: '100%', minHeight: '80px', padding: '0.5rem', fontSize: '12px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--text-primary)', fontFamily: 'inherit', resize: 'vertical' }} />
+                  </div>
                 </div>
 
                 {/* Output */}
-                {row.output && (
-                  <div style={{ backgroundColor: 'var(--bg-primary)', padding: '0.75rem', borderRadius: '4px', border: '1px solid var(--border)', maxHeight: '300px', overflowY: 'auto' }}>
-                    <p style={{ margin: '0 0 0.5rem 0', fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)' }}>OUTPUT:</p>
-                    <p style={{ margin: 0, fontSize: '12px', lineHeight: '1.6', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{row.output}</p>
-                  </div>
-                )}
-
-                {!row.output && !row.loading && (
-                  <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '1.5rem', fontSize: '12px', backgroundColor: 'var(--bg-primary)', borderRadius: '4px' }}>
-                    👉 Click "✨ Gen" button to generate content
-                  </div>
-                )}
-
-                {row.loading && (
-                  <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '1.5rem', fontSize: '12px', backgroundColor: 'var(--bg-primary)', borderRadius: '4px' }}>
-                    ⟳ Generating content... please wait
-                  </div>
-                )}
+                <div>
+                  <p style={{ margin: 0, fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>OUTPUT:</p>
+                  {row.output ? (
+                    <div style={{ backgroundColor: 'var(--bg-primary)', padding: '0.75rem', borderRadius: '4px', border: '1px solid var(--border)', minHeight: '150px', maxHeight: '400px', overflowY: 'auto' }}>
+                      <p style={{ margin: 0, fontSize: '12px', lineHeight: '1.6', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{row.output}</p>
+                    </div>
+                  ) : row.loading ? (
+                    <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem', fontSize: '12px', backgroundColor: 'var(--bg-primary)', borderRadius: '4px' }}>
+                      ⟳ Generating content... please wait
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem', fontSize: '12px', backgroundColor: 'var(--bg-primary)', borderRadius: '4px' }}>
+                      👉 Click "✨ Generate" button to generate content
+                    </div>
+                  )}
+                </div>
               </div>
             ))
           )}
@@ -518,7 +642,7 @@ function LoginScreen({ onLogin, error }) {
     <div className="modal-overlay">
       <div className="modal">
         <h1>🎓 AI Content Studio Pro</h1>
-        <p>Professional AI content generator for CBSE K-12 education with complete Physics, Chemistry, Biology coverage.</p>
+        <p>Professional AI content generator for CBSE K-12 education with full markdown and PDF support.</p>
 
         {error && <div style={{ padding: '0.75rem', backgroundColor: 'var(--danger)', color: 'white', borderRadius: 'var(--radius)', marginBottom: '1rem', fontSize: '13px' }}>{error}</div>}
 
@@ -542,13 +666,7 @@ function LoginScreen({ onLogin, error }) {
 
           {showApiKeys && (
             <div style={{ marginBottom: '1rem', padding: '1rem', backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius)' }}>
-              <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '1rem' }}>Add API keys to enable content generation. Get keys from:</p>
-              <ul style={{ fontSize: '10px', color: 'var(--text-secondary)', margin: '0 0 1rem 1rem' }}>
-                <li>Claude: platform.anthropic.com</li>
-                <li>OpenAI: platform.openai.com</li>
-                <li>DeepSeek: api.deepseek.com</li>
-                <li>Gemini: makersuite.google.com</li>
-              </ul>
+              <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '1rem' }}>Add API keys to enable content generation:</p>
               
               <div className="form-group">
                 <label>Claude API Key (Anthropic)</label>
