@@ -3,13 +3,85 @@ import React, { useState, useEffect } from 'react'
 const GRADES = ['Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12']
 
 const SUBJECTS = {
-  'Grade 1-5': ['English', 'Hindi', 'Mathematics', 'Science', 'Social Studies'],
-  'Grade 6-8': ['English', 'Hindi', 'Mathematics', 'Science', 'Social Studies', 'Sanskrit'],
-  'Grade 9-10': ['English', 'Hindi', 'Mathematics', 'Physics', 'Chemistry', 'Biology', 'Science', 'Social Studies', 'Sanskrit', 'Economics'],
-  'Grade 11-12': ['English', 'Hindi', 'Mathematics', 'Physics', 'Chemistry', 'Biology', 'History', 'Geography', 'Political Science', 'Economics', 'Accountancy', 'Business Studies']
+  'Grade 1-5': [
+    'English',
+    'Hindi',
+    'Mathematics',
+    'Science',
+    'Social Studies',
+    'Sanskrit',
+    'Urdu',
+    'Computer Science',
+    'EVS'
+  ],
+  'Grade 6-8': [
+    'English',
+    'Hindi',
+    'Mathematics',
+    'Science',
+    'Physics',
+    'Chemistry',
+    'Biology',
+    'Social Studies',
+    'History',
+    'Geography',
+    'Civics',
+    'Sanskrit',
+    'Urdu',
+    'Computer Science',
+    'Information Technology',
+    'Physical Education',
+    'Art',
+    'Music'
+  ],
+  'Grade 9-10': [
+    'English',
+    'Hindi',
+    'Mathematics',
+    'Science',
+    'Physics',
+    'Chemistry',
+    'Biology',
+    'Social Studies',
+    'History',
+    'Geography',
+    'Civics',
+    'Economics',
+    'Sanskrit',
+    'Urdu',
+    'Computer Science',
+    'Information Technology',
+    'Physical Education',
+    'Art',
+    'Music'
+  ],
+  'Grade 11-12': [
+    'English',
+    'Hindi',
+    'Mathematics',
+    'Physics',
+    'Chemistry',
+    'Biology',
+    'Accountancy',
+    'Business Studies',
+    'Economics',
+    'History',
+    'Geography',
+    'Political Science',
+    'Computer Science',
+    'Information Technology',
+    'Statistics',
+    'Psychology',
+    'Sociology',
+    'Physical Education',
+    'Art',
+    'Music',
+    'Agriculture',
+    'Home Science'
+  ]
 }
 
-const CONTENT_TYPES = ['Lesson Plan', 'Questions', 'Textbook', 'Summary', 'Quiz']
+const CONTENT_TYPES = ['Lesson Plan', 'Questions', 'Textbook', 'Summary', 'Quiz', 'Notes', 'Practice Paper', 'Sample Paper', 'Assignment', 'Worksheet']
 const AI_MODELS = ['Claude (Anthropic)', 'ChatGPT (OpenAI)', 'DeepSeek', 'Gemini (Google)']
 
 export default function App() {
@@ -17,19 +89,17 @@ export default function App() {
   const [error, setError] = useState(null)
   const [sessionSeconds, setSessionSeconds] = useState(24 * 60 * 60)
 
-  // Form states
-  const [selectedClass, setSelectedClass] = useState('Grade 6')
-  const [selectedSubject, setSelectedSubject] = useState('Science')
-  const [topic, setTopic] = useState('')
-  const [prompt, setPrompt] = useState('')
-  const [selectedModel, setSelectedModel] = useState('Claude (Anthropic)')
-  const [selectedContentType, setSelectedContentType] = useState('Lesson Plan')
+  // Form states for adding new row
+  const [newRowClass, setNewRowClass] = useState('Grade 6')
+  const [newRowSubject, setNewRowSubject] = useState('Physics')
+  const [newRowTopic, setNewRowTopic] = useState('')
+  const [newRowPrompt, setNewRowPrompt] = useState('')
+  const [newRowModel, setNewRowModel] = useState('Claude (Anthropic)')
+  const [newRowContentType, setNewRowContentType] = useState('Lesson Plan')
 
-  // Output & history
-  const [output, setOutput] = useState('')
-  const [loading, setLoading] = useState(false)
+  // Rows state
+  const [rows, setRows] = useState([])
   const [apiKeys, setApiKeys] = useState({})
-  const [history, setHistory] = useState([])
 
   // Load session
   useEffect(() => {
@@ -46,11 +116,6 @@ export default function App() {
       } else {
         localStorage.removeItem('cms_session')
       }
-    }
-
-    const savedHistory = localStorage.getItem('cms_history')
-    if (savedHistory) {
-      setHistory(JSON.parse(savedHistory))
     }
   }, [])
 
@@ -86,8 +151,8 @@ export default function App() {
     setSessionSeconds(24 * 60 * 60)
   }
 
-  const getSubjects = () => {
-    const gradeNum = parseInt(selectedClass.split(' ')[1])
+  const getSubjects = (gradeClass) => {
+    const gradeNum = parseInt(gradeClass.split(' ')[1])
     if (gradeNum <= 5) return SUBJECTS['Grade 1-5']
     if (gradeNum <= 8) return SUBJECTS['Grade 6-8']
     if (gradeNum <= 10) return SUBJECTS['Grade 9-10']
@@ -108,31 +173,60 @@ export default function App() {
     return 'anthropic'
   }
 
-  const handleGenerate = async () => {
-    if (!selectedSubject || !topic || !prompt) {
-      setError('Please fill in: Subject, Topic, and Prompt')
+  const addRow = () => {
+    if (!newRowSubject || !newRowTopic || !newRowPrompt) {
+      setError('Please fill Subject, Topic, and Prompt')
       return
     }
 
-    const provider = getModelProvider(selectedModel)
+    const newRow = {
+      id: `row-${Date.now()}`,
+      class: newRowClass,
+      subject: newRowSubject,
+      topic: newRowTopic,
+      prompt: newRowPrompt,
+      contentType: newRowContentType,
+      aiModel: newRowModel,
+      output: '',
+      loading: false
+    }
+
+    setRows([...rows, newRow])
+    setNewRowTopic('')
+    setNewRowPrompt('')
+  }
+
+  const deleteRow = (id) => {
+    setRows(rows.filter(r => r.id !== id))
+  }
+
+  const generateRow = async (id) => {
+    const row = rows.find(r => r.id === id)
+    if (!row) return
+
+    const provider = getModelProvider(row.aiModel)
     if (!apiKeys[provider]) {
-      setError(`API key not configured for ${selectedModel}. Please add it in login.`)
+      setError(`API key not configured for ${row.aiModel}`)
       return
     }
 
-    setLoading(true)
+    setRows(prevRows =>
+      prevRows.map(r =>
+        r.id === id ? { ...r, loading: true } : r
+      )
+    )
     setError(null)
-    setOutput('')
 
     try {
       const fullPrompt = `
-Content Type: ${selectedContentType}
-Class: ${selectedClass}
-Subject: ${selectedSubject}
-Topic: ${topic}
-Prompt: ${prompt}
+Content Type: ${row.contentType}
+Class: ${row.class}
+Subject: ${row.subject}
+Topic: ${row.topic}
 
-Please generate the ${selectedContentType.toLowerCase()} based on the above information. Follow CBSE curriculum guidelines and provide comprehensive content suitable for the specified class and subject.
+Prompt: ${row.prompt}
+
+Please generate the ${row.contentType.toLowerCase()} content based on the above requirements. Follow CBSE curriculum guidelines and provide comprehensive, well-structured content suitable for the specified class and subject. Ensure the content is educational, accurate, and engaging.
       `.trim()
 
       const response = await fetch('/.netlify/functions/ai-proxy', {
@@ -148,84 +242,105 @@ Please generate the ${selectedContentType.toLowerCase()} based on the above info
       if (response.ok) {
         const data = await response.json()
         if (data.content) {
-          setOutput(data.content)
-          
-          // Add to history
-          const newEntry = {
-            id: `hist-${Date.now()}`,
-            class: selectedClass,
-            subject: selectedSubject,
-            topic,
-            contentType: selectedContentType,
-            aiModel: selectedModel,
-            prompt,
-            output: data.content,
-            timestamp: new Date().toLocaleString()
-          }
-          const newHistory = [newEntry, ...history].slice(0, 50) // Keep last 50
-          setHistory(newHistory)
-          localStorage.setItem('cms_history', JSON.stringify(newHistory))
+          setRows(prevRows =>
+            prevRows.map(r =>
+              r.id === id ? { ...r, output: data.content, loading: false } : r
+            )
+          )
         } else {
           setError('No content generated')
+          setRows(prevRows =>
+            prevRows.map(r =>
+              r.id === id ? { ...r, loading: false } : r
+            )
+          )
         }
       } else {
         const errorData = await response.json()
         setError('Generation failed: ' + (errorData.error || 'Unknown error'))
+        setRows(prevRows =>
+          prevRows.map(r =>
+            r.id === id ? { ...r, loading: false } : r
+          )
+        )
       }
     } catch (err) {
       setError('Error: ' + err.message)
-    } finally {
-      setLoading(false)
+      setRows(prevRows =>
+        prevRows.map(r =>
+          r.id === id ? { ...r, loading: false } : r
+        )
+      )
     }
   }
 
-  const exportToMarkdown = () => {
-    if (!output) {
-      alert('No output to export')
+  const exportAllMarkdown = () => {
+    const successRows = rows.filter(r => r.output)
+    if (successRows.length === 0) {
+      alert('No generated content to export')
       return
     }
 
-    let content = `# ${selectedContentType} - ${selectedClass}\n\n`
-    content += `**Subject:** ${selectedSubject}\n`
-    content += `**Topic:** ${topic}\n`
-    content += `**AI Model:** ${selectedModel}\n\n`
-    content += `## Content\n\n${output}`
+    let content = '# AI Generated Educational Content\n\n'
+    content += `**Generated on:** ${new Date().toLocaleString()}\n\n`
+    content += `**Total Items:** ${successRows.length}\n\n`
+    content += `---\n\n`
+
+    successRows.forEach((row, idx) => {
+      content += `## ${idx + 1}. ${row.topic}\n\n`
+      content += `| Property | Value |\n`
+      content += `|----------|-------|\n`
+      content += `| Class | ${row.class} |\n`
+      content += `| Subject | ${row.subject} |\n`
+      content += `| Content Type | ${row.contentType} |\n`
+      content += `| AI Model | ${row.aiModel} |\n\n`
+      content += `### Content:\n\n${row.output}\n\n---\n\n`
+    })
 
     const blob = new Blob([content], { type: 'text/markdown' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${topic.replace(/\s+/g, '-')}-${Date.now()}.md`
+    a.download = `ai-content-${Date.now()}.md`
     a.click()
     URL.revokeObjectURL(url)
   }
 
-  const exportToText = () => {
-    if (!output) {
-      alert('No output to export')
+  const exportAllText = () => {
+    const successRows = rows.filter(r => r.output)
+    if (successRows.length === 0) {
+      alert('No generated content to export')
       return
     }
 
-    let content = `${selectedContentType} - ${selectedClass}\n`
-    content += `Subject: ${selectedSubject}\n`
-    content += `Topic: ${topic}\n`
-    content += `AI Model: ${selectedModel}\n\n`
-    content += output
+    let content = `AI GENERATED EDUCATIONAL CONTENT\n`
+    content += `Generated on: ${new Date().toLocaleString()}\n`
+    content += `Total Items: ${successRows.length}\n`
+    content += `${'='.repeat(80)}\n\n`
+
+    successRows.forEach((row, idx) => {
+      content += `${idx + 1}. ${row.topic}\n`
+      content += `${'-'.repeat(80)}\n`
+      content += `Class: ${row.class}\n`
+      content += `Subject: ${row.subject}\n`
+      content += `Content Type: ${row.contentType}\n`
+      content += `AI Model: ${row.aiModel}\n`
+      content += `Prompt: ${row.prompt}\n\n`
+      content += `CONTENT:\n`
+      content += `${row.output}\n\n`
+      content += `${'='.repeat(80)}\n\n`
+    })
 
     const blob = new Blob([content], { type: 'text/plain' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${topic.replace(/\s+/g, '-')}-${Date.now()}.txt`
+    a.download = `ai-content-${Date.now()}.txt`
     a.click()
     URL.revokeObjectURL(url)
   }
 
-  const copyToClipboard = () => {
-    if (!output) {
-      alert('No output to copy')
-      return
-    }
+  const copyRowOutput = (output) => {
     navigator.clipboard.writeText(output)
     alert('Copied to clipboard!')
   }
@@ -234,10 +349,10 @@ Please generate the ${selectedContentType.toLowerCase()} based on the above info
     return <LoginScreen onLogin={handleLogin} error={error} />
   }
 
-  const subjects = getSubjects()
+  const newRowSubjects = getSubjects(newRowClass)
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: 'var(--bg-primary)' }}>
       {error && (
         <div className="error-banner">
           <span>{error}</span>
@@ -246,198 +361,129 @@ Please generate the ${selectedContentType.toLowerCase()} based on the above info
       )}
 
       {/* Header */}
-      <div style={{ padding: '1.5rem', backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ maxWidth: '1600px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ padding: '1rem 1.5rem', backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <h1 style={{ fontSize: '24px', fontWeight: '600', margin: '0 0 0.25rem 0' }}>🎓 AI Content Generator</h1>
-            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>
-              {user.email} • {formatTime(sessionSeconds)} remaining
+            <h1 style={{ fontSize: '20px', fontWeight: '600', margin: '0 0 0.25rem 0' }}>🎓 AI Content Generator</h1>
+            <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: 0 }}>
+              {user.email} • {formatTime(sessionSeconds)} remaining • {rows.length} rows • {rows.filter(r => r.output).length} generated
             </p>
           </div>
-          <button className="btn btn-sm" onClick={handleLogout}>
-            Logout
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button className="btn btn-sm" onClick={exportAllMarkdown} disabled={!rows.some(r => r.output)} title="Export all as Markdown">
+              📄 MD
+            </button>
+            <button className="btn btn-sm" onClick={exportAllText} disabled={!rows.some(r => r.output)} title="Export all as Text">
+              📝 TXT
+            </button>
+            <button className="btn btn-sm" onClick={handleLogout}>
+              Logout
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Main Container */}
-      <div style={{ maxWidth: '1600px', margin: '0 auto', padding: '2rem' }}>
+      {/* Main Content */}
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+        {/* ADD ROW FORM */}
+        <div style={{ padding: '1rem', backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+          <h2 style={{ fontSize: '13px', fontWeight: '600', margin: '0 0 0.75rem 0' }}>📝 Add New Row</h2>
           
-          {/* LEFT SIDE - INPUT FORM */}
-          <div>
-            <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-              <h2 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '1.5rem' }}>📝 Input Parameters</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: '0.5rem', marginBottom: '0.75rem' }}>
+            <select value={newRowClass} onChange={(e) => {
+              setNewRowClass(e.target.value)
+              setNewRowSubject('')
+            }} style={{ padding: '0.5rem', fontSize: '12px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--text-primary)' }}>
+              {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+            </select>
 
-              {/* Class */}
-              <div className="form-group">
-                <label>Class *</label>
-                <select value={selectedClass} onChange={(e) => {
-                  setSelectedClass(e.target.value)
-                  setSelectedSubject('')
-                }}>
-                  {GRADES.map(g => (
-                    <option key={g} value={g}>{g}</option>
-                  ))}
-                </select>
-              </div>
+            <select value={newRowSubject} onChange={(e) => setNewRowSubject(e.target.value)} style={{ padding: '0.5rem', fontSize: '12px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--text-primary)' }}>
+              <option value="">Subject</option>
+              {newRowSubjects.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
 
-              {/* Subject */}
-              <div className="form-group">
-                <label>Subject *</label>
-                <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)}>
-                  <option value="">Select Subject</option>
-                  {subjects.map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              </div>
+            <input type="text" value={newRowTopic} onChange={(e) => setNewRowTopic(e.target.value)} placeholder="Topic" style={{ padding: '0.5rem', fontSize: '12px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--text-primary)' }} />
 
-              {/* Topic */}
-              <div className="form-group">
-                <label>Topic *</label>
-                <input
-                  type="text"
-                  value={topic}
-                  onChange={(e) => setTopic(e.target.value)}
-                  placeholder="e.g., Photosynthesis"
-                />
-              </div>
+            <select value={newRowContentType} onChange={(e) => setNewRowContentType(e.target.value)} style={{ padding: '0.5rem', fontSize: '12px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--text-primary)' }}>
+              {CONTENT_TYPES.map(ct => <option key={ct} value={ct}>{ct}</option>)}
+            </select>
 
-              {/* Content Type */}
-              <div className="form-group">
-                <label>Content Type *</label>
-                <select value={selectedContentType} onChange={(e) => setSelectedContentType(e.target.value)}>
-                  {CONTENT_TYPES.map(ct => (
-                    <option key={ct} value={ct}>{ct}</option>
-                  ))}
-                </select>
-              </div>
+            <select value={newRowModel} onChange={(e) => setNewRowModel(e.target.value)} style={{ padding: '0.5rem', fontSize: '12px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--text-primary)' }}>
+              {AI_MODELS.map(m => <option key={m} value={m}>{m.split(' ')[0]}</option>)}
+            </select>
 
-              {/* Prompt */}
-              <div className="form-group">
-                <label>Prompt/Instructions *</label>
-                <textarea
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="Describe what content you want to generate..."
-                  style={{ minHeight: '120px' }}
-                />
-              </div>
+            <input type="text" value={newRowPrompt} onChange={(e) => setNewRowPrompt(e.target.value)} placeholder="Prompt" style={{ padding: '0.5rem', fontSize: '12px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--text-primary)' }} />
 
-              {/* AI Model */}
-              <div className="form-group">
-                <label>AI Model *</label>
-                <select value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)}>
-                  {AI_MODELS.map(m => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Generate Button */}
-              <button
-                className="btn btn-primary"
-                onClick={handleGenerate}
-                disabled={loading || !selectedSubject || !topic || !prompt}
-                style={{ width: '100%', padding: '0.75rem', fontSize: '14px', fontWeight: '600' }}
-              >
-                {loading ? '⟳ Generating...' : '✨ Generate Content'}
-              </button>
-            </div>
-
-            {/* History */}
-            {history.length > 0 && (
-              <div style={{ marginTop: '2rem', backgroundColor: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '1rem' }}>📚 Recent Generations ({history.length})</h3>
-                <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                  {history.map((item) => (
-                    <div key={item.id} style={{ padding: '0.75rem', borderBottom: '1px solid var(--border)', cursor: 'pointer' }} 
-                      onClick={() => {
-                        setSelectedClass(item.class)
-                        setSelectedSubject(item.subject)
-                        setTopic(item.topic)
-                        setSelectedContentType(item.contentType)
-                        setSelectedModel(item.aiModel)
-                        setPrompt(item.prompt)
-                        setOutput(item.output)
-                      }}
-                      title="Click to load this generation">
-                      <div style={{ fontSize: '12px', fontWeight: '500' }}>{item.topic}</div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{item.timestamp}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <button className="btn btn-primary btn-sm" onClick={addRow} style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>
+              + Add Row
+            </button>
           </div>
+        </div>
 
-          {/* RIGHT SIDE - OUTPUT */}
-          <div>
-            <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 200px)' }}>
-              <h2 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '1rem' }}>📄 AI Output</h2>
-              
-              {/* Output Display */}
-              <textarea
-                value={output}
-                readOnly
-                placeholder="Generated content will appear here..."
-                style={{
-                  flex: 1,
-                  padding: '1rem',
-                  backgroundColor: 'var(--bg-primary)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius)',
-                  fontFamily: 'monospace',
-                  fontSize: '13px',
-                  color: 'var(--text-primary)',
-                  resize: 'none',
-                  lineHeight: '1.6',
-                  marginBottom: '1rem'
-                }}
-              />
-
-              {/* Action Buttons */}
-              {output && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
-                  <button
-                    className="btn btn-primary btn-sm"
-                    onClick={copyToClipboard}
-                    style={{ padding: '0.6rem' }}
-                  >
-                    📋 Copy
-                  </button>
-                  <button
-                    className="btn btn-sm"
-                    onClick={exportToMarkdown}
-                    style={{ padding: '0.6rem' }}
-                  >
-                    📝 Markdown
-                  </button>
-                  <button
-                    className="btn btn-sm"
-                    onClick={exportToText}
-                    style={{ padding: '0.6rem' }}
-                  >
-                    📄 Text
-                  </button>
-                </div>
-              )}
-
-              {!output && !loading && (
-                <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem' }}>
-                  <p style={{ fontSize: '14px', margin: 0 }}>Fill the form and click "Generate Content" to see AI output here!</p>
-                </div>
-              )}
-
-              {loading && (
-                <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem' }}>
-                  <p style={{ fontSize: '14px', margin: 0 }}>⟳ Generating content...</p>
-                </div>
-              )}
+        {/* ROWS TABLE */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '1rem' }}>
+          {rows.length === 0 ? (
+            <div style={{ textAlign: 'center', color: 'var(--text-secondary)', paddingTop: '2rem' }}>
+              <p style={{ fontSize: '14px' }}>📚 No rows added yet. Fill the form above and click "+ Add Row" to get started!</p>
             </div>
-          </div>
+          ) : (
+            rows.map((row) => (
+              <div key={row.id} style={{ marginBottom: '1.5rem', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1rem' }}>
+                
+                {/* Row Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ flex: 1 }}>
+                    <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '600' }}>📌 {row.topic}</h3>
+                    <p style={{ margin: '0.25rem 0 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                      {row.class} • {row.subject} • {row.contentType} • {row.aiModel.split(' ')[0]}
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                    <button className="btn btn-primary btn-sm" onClick={() => generateRow(row.id)} disabled={row.loading} style={{ padding: '0.4rem 0.8rem', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                      {row.loading ? '⟳ Gen...' : '✨ Gen'}
+                    </button>
+                    {row.output && (
+                      <button className="btn btn-sm" onClick={() => copyRowOutput(row.output)} style={{ padding: '0.4rem 0.6rem', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                        📋 Copy
+                      </button>
+                    )}
+                    <button className="btn btn-sm" onClick={() => deleteRow(row.id)} style={{ padding: '0.4rem 0.6rem', color: 'var(--danger)', whiteSpace: 'nowrap' }}>
+                      ✕ Del
+                    </button>
+                  </div>
+                </div>
+
+                {/* Prompt */}
+                <div style={{ marginBottom: '1rem' }}>
+                  <p style={{ margin: 0, fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)' }}>PROMPT:</p>
+                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '12px', color: 'var(--text-primary)' }}>
+                    {row.prompt}
+                  </p>
+                </div>
+
+                {/* Output */}
+                {row.output && (
+                  <div style={{ backgroundColor: 'var(--bg-primary)', padding: '0.75rem', borderRadius: '4px', border: '1px solid var(--border)', maxHeight: '300px', overflowY: 'auto' }}>
+                    <p style={{ margin: '0 0 0.5rem 0', fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)' }}>OUTPUT:</p>
+                    <p style={{ margin: 0, fontSize: '12px', lineHeight: '1.6', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{row.output}</p>
+                  </div>
+                )}
+
+                {!row.output && !row.loading && (
+                  <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '1.5rem', fontSize: '12px', backgroundColor: 'var(--bg-primary)', borderRadius: '4px' }}>
+                    👉 Click "✨ Gen" button to generate content
+                  </div>
+                )}
+
+                {row.loading && (
+                  <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '1.5rem', fontSize: '12px', backgroundColor: 'var(--bg-primary)', borderRadius: '4px' }}>
+                    ⟳ Generating content... please wait
+                  </div>
+                )}
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>
@@ -461,75 +507,64 @@ function LoginScreen({ onLogin, error }) {
       alert('Email and name are required')
       return
     }
+    if (!Object.values(apiKeys).some(k => k.trim())) {
+      alert('Please add at least one API key')
+      return
+    }
     onLogin(email, name, apiKeys)
   }
 
   return (
     <div className="modal-overlay">
       <div className="modal">
-        <h1>🎓 AI Content Studio</h1>
-        <p>Professional AI content generator for CBSE K-12 education.</p>
+        <h1>🎓 AI Content Studio Pro</h1>
+        <p>Professional AI content generator for CBSE K-12 education with complete Physics, Chemistry, Biology coverage.</p>
 
         {error && <div style={{ padding: '0.75rem', backgroundColor: 'var(--danger)', color: 'white', borderRadius: 'var(--radius)', marginBottom: '1rem', fontSize: '13px' }}>{error}</div>}
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label>Email</label>
+            <label>Email *</label>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@school.edu" required />
           </div>
 
           <div className="form-group">
-            <label>Name</label>
+            <label>Name *</label>
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" required />
           </div>
 
           <div className="form-group">
             <label>
               <input type="checkbox" checked={showApiKeys} onChange={(e) => setShowApiKeys(e.target.checked)} />
-              {' '}Add API Keys (Required)
+              {' '}Add API Keys (At least one required)
             </label>
           </div>
 
           {showApiKeys && (
             <div style={{ marginBottom: '1rem', padding: '1rem', backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius)' }}>
+              <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '1rem' }}>Add API keys to enable content generation. Get keys from:</p>
+              <ul style={{ fontSize: '10px', color: 'var(--text-secondary)', margin: '0 0 1rem 1rem' }}>
+                <li>Claude: platform.anthropic.com</li>
+                <li>OpenAI: platform.openai.com</li>
+                <li>DeepSeek: api.deepseek.com</li>
+                <li>Gemini: makersuite.google.com</li>
+              </ul>
+              
               <div className="form-group">
                 <label>Claude API Key (Anthropic)</label>
-                <input
-                  type="password"
-                  value={apiKeys.anthropic}
-                  onChange={(e) => setApiKeys(prev => ({ ...prev, anthropic: e.target.value }))}
-                  placeholder="sk-..."
-                />
+                <input type="password" value={apiKeys.anthropic} onChange={(e) => setApiKeys(prev => ({ ...prev, anthropic: e.target.value }))} placeholder="sk-..." />
               </div>
-
               <div className="form-group">
                 <label>OpenAI API Key</label>
-                <input
-                  type="password"
-                  value={apiKeys.openai}
-                  onChange={(e) => setApiKeys(prev => ({ ...prev, openai: e.target.value }))}
-                  placeholder="sk-..."
-                />
+                <input type="password" value={apiKeys.openai} onChange={(e) => setApiKeys(prev => ({ ...prev, openai: e.target.value }))} placeholder="sk-..." />
               </div>
-
               <div className="form-group">
                 <label>DeepSeek API Key</label>
-                <input
-                  type="password"
-                  value={apiKeys.deepseek}
-                  onChange={(e) => setApiKeys(prev => ({ ...prev, deepseek: e.target.value }))}
-                  placeholder="sk-..."
-                />
+                <input type="password" value={apiKeys.deepseek} onChange={(e) => setApiKeys(prev => ({ ...prev, deepseek: e.target.value }))} placeholder="sk-..." />
               </div>
-
               <div className="form-group">
                 <label>Google Gemini API Key</label>
-                <input
-                  type="password"
-                  value={apiKeys.google}
-                  onChange={(e) => setApiKeys(prev => ({ ...prev, google: e.target.value }))}
-                  placeholder="AIza..."
-                />
+                <input type="password" value={apiKeys.google} onChange={(e) => setApiKeys(prev => ({ ...prev, google: e.target.value }))} placeholder="AIza..." />
               </div>
             </div>
           )}
