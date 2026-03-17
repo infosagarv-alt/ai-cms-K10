@@ -17,7 +17,7 @@ export default function App() {
   const [error, setError] = useState(null)
   const [sessionSeconds, setSessionSeconds] = useState(24 * 60 * 60)
 
-  // Form states for input
+  // Form states
   const [selectedClass, setSelectedClass] = useState('Grade 6')
   const [selectedSubject, setSelectedSubject] = useState('Science')
   const [topic, setTopic] = useState('')
@@ -25,10 +25,11 @@ export default function App() {
   const [selectedModel, setSelectedModel] = useState('Claude (Anthropic)')
   const [selectedContentType, setSelectedContentType] = useState('Lesson Plan')
 
-  // Table rows
-  const [rows, setRows] = useState([])
+  // Output & history
+  const [output, setOutput] = useState('')
   const [loading, setLoading] = useState(false)
   const [apiKeys, setApiKeys] = useState({})
+  const [history, setHistory] = useState([])
 
   // Load session
   useEffect(() => {
@@ -45,6 +46,11 @@ export default function App() {
       } else {
         localStorage.removeItem('cms_session')
       }
+    }
+
+    const savedHistory = localStorage.getItem('cms_history')
+    if (savedHistory) {
+      setHistory(JSON.parse(savedHistory))
     }
   }, [])
 
@@ -102,147 +108,126 @@ export default function App() {
     return 'anthropic'
   }
 
-  const addRow = () => {
-    const newRow = {
-      id: `row-${Date.now()}`,
-      class: selectedClass,
-      subject: selectedSubject,
-      topic: topic,
-      contentType: selectedContentType,
-      aiModel: selectedModel,
-      prompt: prompt,
-      output: '',
-      status: 'pending'
+  const handleGenerate = async () => {
+    if (!selectedSubject || !topic || !prompt) {
+      setError('Please fill in: Subject, Topic, and Prompt')
+      return
     }
-    setRows([...rows, newRow])
-    // Reset form
-    setTopic('')
-    setPrompt('')
-  }
 
-  const deleteRow = (id) => {
-    setRows(rows.filter(r => r.id !== id))
-  }
-
-  const generateAllRows = async () => {
-    const rowsToGenerate = rows.filter(r => r.status === 'pending')
-    
-    if (rowsToGenerate.length === 0) {
-      setError('No pending rows to generate')
+    const provider = getModelProvider(selectedModel)
+    if (!apiKeys[provider]) {
+      setError(`API key not configured for ${selectedModel}. Please add it in login.`)
       return
     }
 
     setLoading(true)
     setError(null)
+    setOutput('')
 
-    for (const row of rowsToGenerate) {
-      try {
-        const provider = getModelProvider(row.aiModel)
-        if (!apiKeys[provider]) {
-          setError(`API key not configured for ${row.aiModel}`)
-          setRows(prevRows =>
-            prevRows.map(r =>
-              r.id === row.id ? { ...r, status: 'error', output: 'API key not configured' } : r
-            )
-          )
-          continue
-        }
+    try {
+      const fullPrompt = `
+Content Type: ${selectedContentType}
+Class: ${selectedClass}
+Subject: ${selectedSubject}
+Topic: ${topic}
+Prompt: ${prompt}
 
-        const fullPrompt = `
-Content Type: ${row.contentType}
-Class: ${row.class}
-Subject: ${row.subject}
-Topic: ${row.topic}
-Prompt: ${row.prompt}
+Please generate the ${selectedContentType.toLowerCase()} based on the above information. Follow CBSE curriculum guidelines and provide comprehensive content suitable for the specified class and subject.
+      `.trim()
 
-Please generate the ${row.contentType.toLowerCase()} based on the above information. Follow CBSE curriculum guidelines.
-        `.trim()
-
-        const response = await fetch('/.netlify/functions/ai-proxy', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            provider,
-            prompt: fullPrompt,
-            apiKey: apiKeys[provider]
-          })
+      const response = await fetch('/.netlify/functions/ai-proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider,
+          prompt: fullPrompt,
+          apiKey: apiKeys[provider]
         })
+      })
 
-        if (response.ok) {
-          const data = await response.json()
-          if (data.content) {
-            setRows(prevRows =>
-              prevRows.map(r =>
-                r.id === row.id ? { ...r, output: data.content, status: 'success' } : r
-              )
-            )
-          } else {
-            setRows(prevRows =>
-              prevRows.map(r =>
-                r.id === row.id ? { ...r, status: 'error', output: 'No content generated' } : r
-              )
-            )
+      if (response.ok) {
+        const data = await response.json()
+        if (data.content) {
+          setOutput(data.content)
+          
+          // Add to history
+          const newEntry = {
+            id: `hist-${Date.now()}`,
+            class: selectedClass,
+            subject: selectedSubject,
+            topic,
+            contentType: selectedContentType,
+            aiModel: selectedModel,
+            prompt,
+            output: data.content,
+            timestamp: new Date().toLocaleString()
           }
+          const newHistory = [newEntry, ...history].slice(0, 50) // Keep last 50
+          setHistory(newHistory)
+          localStorage.setItem('cms_history', JSON.stringify(newHistory))
         } else {
-          const errorData = await response.json()
-          setRows(prevRows =>
-            prevRows.map(r =>
-              r.id === row.id ? { ...r, status: 'error', output: errorData.error || 'Generation failed' } : r
-            )
-          )
+          setError('No content generated')
         }
-      } catch (err) {
-        setRows(prevRows =>
-          prevRows.map(r =>
-            r.id === row.id ? { ...r, status: 'error', output: err.message } : r
-          )
-        )
+      } else {
+        const errorData = await response.json()
+        setError('Generation failed: ' + (errorData.error || 'Unknown error'))
       }
+    } catch (err) {
+      setError('Error: ' + err.message)
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
   const exportToMarkdown = () => {
-    let content = '# AI Generated Educational Content\n\n'
-    content += `**Generated on:** ${new Date().toLocaleString()}\n\n`
+    if (!output) {
+      alert('No output to export')
+      return
+    }
 
-    rows.forEach((row, idx) => {
-      content += `## ${idx + 1}. ${row.contentType} - ${row.topic}\n\n`
-      content += `| Property | Value |\n`
-      content += `|----------|-------|\n`
-      content += `| Class | ${row.class} |\n`
-      content += `| Subject | ${row.subject} |\n`
-      content += `| Topic | ${row.topic} |\n`
-      content += `| Content Type | ${row.contentType} |\n`
-      content += `| AI Model | ${row.aiModel} |\n`
-      content += `| Status | ${row.status} |\n\n`
-      content += `### Content:\n\n${row.output || 'No content generated'}\n\n---\n\n`
-    })
+    let content = `# ${selectedContentType} - ${selectedClass}\n\n`
+    content += `**Subject:** ${selectedSubject}\n`
+    content += `**Topic:** ${topic}\n`
+    content += `**AI Model:** ${selectedModel}\n\n`
+    content += `## Content\n\n${output}`
 
     const blob = new Blob([content], { type: 'text/markdown' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `ai-content-${Date.now()}.md`
+    a.download = `${topic.replace(/\s+/g, '-')}-${Date.now()}.md`
     a.click()
     URL.revokeObjectURL(url)
   }
 
-  const exportToCSV = () => {
-    let content = 'Class,Subject,Topic,Content Type,AI Model,Status,Output\n'
-    rows.forEach(row => {
-      const output = (row.output || '').replace(/"/g, '""').replace(/\n/g, ' ')
-      content += `"${row.class}","${row.subject}","${row.topic}","${row.contentType}","${row.aiModel}","${row.status}","${output}"\n`
-    })
+  const exportToText = () => {
+    if (!output) {
+      alert('No output to export')
+      return
+    }
 
-    const blob = new Blob([content], { type: 'text/csv' })
+    let content = `${selectedContentType} - ${selectedClass}\n`
+    content += `Subject: ${selectedSubject}\n`
+    content += `Topic: ${topic}\n`
+    content += `AI Model: ${selectedModel}\n\n`
+    content += output
+
+    const blob = new Blob([content], { type: 'text/plain' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `ai-content-${Date.now()}.csv`
+    a.download = `${topic.replace(/\s+/g, '-')}-${Date.now()}.txt`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  const copyToClipboard = () => {
+    if (!output) {
+      alert('No output to copy')
+      return
+    }
+    navigator.clipboard.writeText(output)
+    alert('Copied to clipboard!')
   }
 
   if (!user) {
@@ -266,7 +251,7 @@ Please generate the ${row.contentType.toLowerCase()} based on the above informat
           <div>
             <h1 style={{ fontSize: '24px', fontWeight: '600', margin: '0 0 0.25rem 0' }}>🎓 AI Content Generator</h1>
             <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>
-              {user.email} • {formatTime(sessionSeconds)} remaining • {rows.length} content items queued
+              {user.email} • {formatTime(sessionSeconds)} remaining
             </p>
           </div>
           <button className="btn btn-sm" onClick={handleLogout}>
@@ -278,192 +263,182 @@ Please generate the ${row.contentType.toLowerCase()} based on the above informat
       {/* Main Container */}
       <div style={{ maxWidth: '1600px', margin: '0 auto', padding: '2rem' }}>
         
-        {/* INPUT SECTION */}
-        <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)', marginBottom: '2rem' }}>
-          <h2 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '1.5rem' }}>📝 Create New Content Row</h2>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-            {/* Class */}
-            <div className="form-group" style={{ margin: 0 }}>
-              <label>Class *</label>
-              <select value={selectedClass} onChange={(e) => {
-                setSelectedClass(e.target.value)
-                setSelectedSubject('')
-              }}>
-                {GRADES.map(g => (
-                  <option key={g} value={g}>{g}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Subject */}
-            <div className="form-group" style={{ margin: 0 }}>
-              <label>Subject *</label>
-              <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)}>
-                <option value="">Select Subject</option>
-                {subjects.map(s => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Content Type */}
-            <div className="form-group" style={{ margin: 0 }}>
-              <label>Content Type *</label>
-              <select value={selectedContentType} onChange={(e) => setSelectedContentType(e.target.value)}>
-                {CONTENT_TYPES.map(ct => (
-                  <option key={ct} value={ct}>{ct}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-            {/* Topic */}
-            <div className="form-group" style={{ margin: 0 }}>
-              <label>Topic *</label>
-              <input
-                type="text"
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-                placeholder="e.g., Photosynthesis, Democracy, Fractions"
-              />
-            </div>
-
-            {/* AI Model */}
-            <div className="form-group" style={{ margin: 0 }}>
-              <label>AI Model *</label>
-              <select value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)}>
-                {AI_MODELS.map(m => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Prompt */}
-          <div className="form-group" style={{ marginBottom: '1rem' }}>
-            <label>Prompt/Instructions *</label>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Describe what content you want to generate..."
-              style={{ minHeight: '80px' }}
-            />
-          </div>
-
-          {/* Add Row Button */}
-          <button
-            className="btn btn-primary"
-            onClick={addRow}
-            disabled={!selectedSubject || !topic || !prompt}
-            style={{ padding: '0.6rem 1.2rem', fontSize: '13px' }}
-          >
-            + Add Row
-          </button>
-        </div>
-
-        {/* TABLE SECTION */}
-        {rows.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+          
+          {/* LEFT SIDE - INPUT FORM */}
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
-              <h2 style={{ fontSize: '16px', fontWeight: '600', margin: 0 }}>📋 Content Queue ({rows.length} items)</h2>
-              
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={generateAllRows}
-                  disabled={loading || rows.filter(r => r.status === 'pending').length === 0}
-                >
-                  {loading ? '⟳ Generating...' : '✨ Generate All'}
-                </button>
-                <button className="btn btn-sm" onClick={exportToMarkdown}>
-                  📄 Markdown
-                </button>
-                <button className="btn btn-sm" onClick={exportToCSV}>
-                  📊 CSV
-                </button>
-              </div>
-            </div>
+            <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+              <h2 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '1.5rem' }}>📝 Input Parameters</h2>
 
-            {/* Table */}
-            <div style={{ overflowX: 'auto', backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                <thead>
-                  <tr style={{ backgroundColor: 'var(--bg-tertiary)', borderBottom: '1px solid var(--border)' }}>
-                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', minWidth: '30px' }}>#</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', minWidth: '70px' }}>Class</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', minWidth: '100px' }}>Subject</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', minWidth: '120px' }}>Topic</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', minWidth: '100px' }}>Type</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', minWidth: '80px' }}>AI Model</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', minWidth: '70px' }}>Status</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', minWidth: '200px' }}>Output Preview</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', minWidth: '50px' }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row, idx) => (
-                    <tr key={row.id} style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'var(--bg-primary)' }}>
-                      <td style={{ padding: '0.75rem', fontWeight: '600' }}>{idx + 1}</td>
-                      <td style={{ padding: '0.75rem' }}>{row.class}</td>
-                      <td style={{ padding: '0.75rem' }}>{row.subject}</td>
-                      <td style={{ padding: '0.75rem' }}>{row.topic}</td>
-                      <td style={{ padding: '0.75rem' }}>{row.contentType}</td>
-                      <td style={{ padding: '0.75rem', fontSize: '11px' }}>{row.aiModel.split(' ')[0]}</td>
-                      <td style={{ padding: '0.75rem' }}>
-                        <span style={{
-                          display: 'inline-block',
-                          padding: '0.25rem 0.75rem',
-                          borderRadius: '4px',
-                          fontSize: '11px',
-                          fontWeight: '600',
-                          backgroundColor: row.status === 'success' ? '#28a745' : row.status === 'error' ? '#dc3545' : '#ffc107',
-                          color: 'white'
-                        }}>
-                          {row.status}
-                        </span>
-                      </td>
-                      <td style={{ padding: '0.75rem', color: 'var(--text-secondary)', fontSize: '11px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {row.output ? row.output.substring(0, 80) + '...' : '—'}
-                      </td>
-                      <td style={{ padding: '0.75rem', textAlign: 'center' }}>
-                        <button
-                          className="btn"
-                          style={{ padding: '0.3rem 0.6rem', fontSize: '14px', color: 'var(--danger)' }}
-                          onClick={() => deleteRow(row.id)}
-                          title="Delete row"
-                        >
-                          ✕
-                        </button>
-                      </td>
-                    </tr>
+              {/* Class */}
+              <div className="form-group">
+                <label>Class *</label>
+                <select value={selectedClass} onChange={(e) => {
+                  setSelectedClass(e.target.value)
+                  setSelectedSubject('')
+                }}>
+                  {GRADES.map(g => (
+                    <option key={g} value={g}>{g}</option>
                   ))}
-                </tbody>
-              </table>
+                </select>
+              </div>
+
+              {/* Subject */}
+              <div className="form-group">
+                <label>Subject *</label>
+                <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)}>
+                  <option value="">Select Subject</option>
+                  {subjects.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Topic */}
+              <div className="form-group">
+                <label>Topic *</label>
+                <input
+                  type="text"
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                  placeholder="e.g., Photosynthesis"
+                />
+              </div>
+
+              {/* Content Type */}
+              <div className="form-group">
+                <label>Content Type *</label>
+                <select value={selectedContentType} onChange={(e) => setSelectedContentType(e.target.value)}>
+                  {CONTENT_TYPES.map(ct => (
+                    <option key={ct} value={ct}>{ct}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Prompt */}
+              <div className="form-group">
+                <label>Prompt/Instructions *</label>
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="Describe what content you want to generate..."
+                  style={{ minHeight: '120px' }}
+                />
+              </div>
+
+              {/* AI Model */}
+              <div className="form-group">
+                <label>AI Model *</label>
+                <select value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)}>
+                  {AI_MODELS.map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Generate Button */}
+              <button
+                className="btn btn-primary"
+                onClick={handleGenerate}
+                disabled={loading || !selectedSubject || !topic || !prompt}
+                style={{ width: '100%', padding: '0.75rem', fontSize: '14px', fontWeight: '600' }}
+              >
+                {loading ? '⟳ Generating...' : '✨ Generate Content'}
+              </button>
             </div>
 
-            {/* Stats */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginTop: '1rem' }}>
-              <div style={{ padding: '1rem', backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Total Rows</div>
-                <div style={{ fontSize: '20px', fontWeight: '600' }}>{rows.length}</div>
+            {/* History */}
+            {history.length > 0 && (
+              <div style={{ marginTop: '2rem', backgroundColor: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+                <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '1rem' }}>📚 Recent Generations ({history.length})</h3>
+                <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                  {history.map((item) => (
+                    <div key={item.id} style={{ padding: '0.75rem', borderBottom: '1px solid var(--border)', cursor: 'pointer' }} 
+                      onClick={() => {
+                        setSelectedClass(item.class)
+                        setSelectedSubject(item.subject)
+                        setTopic(item.topic)
+                        setSelectedContentType(item.contentType)
+                        setSelectedModel(item.aiModel)
+                        setPrompt(item.prompt)
+                        setOutput(item.output)
+                      }}
+                      title="Click to load this generation">
+                      <div style={{ fontSize: '12px', fontWeight: '500' }}>{item.topic}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{item.timestamp}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div style={{ padding: '1rem', backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Pending</div>
-                <div style={{ fontSize: '20px', fontWeight: '600', color: '#ffc107' }}>{rows.filter(r => r.status === 'pending').length}</div>
-              </div>
-              <div style={{ padding: '1rem', backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Success</div>
-                <div style={{ fontSize: '20px', fontWeight: '600', color: '#28a745' }}>{rows.filter(r => r.status === 'success').length}</div>
-              </div>
-              <div style={{ padding: '1rem', backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Error</div>
-                <div style={{ fontSize: '20px', fontWeight: '600', color: '#dc3545' }}>{rows.filter(r => r.status === 'error').length}</div>
-              </div>
+            )}
+          </div>
+
+          {/* RIGHT SIDE - OUTPUT */}
+          <div>
+            <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 200px)' }}>
+              <h2 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '1rem' }}>📄 AI Output</h2>
+              
+              {/* Output Display */}
+              <textarea
+                value={output}
+                readOnly
+                placeholder="Generated content will appear here..."
+                style={{
+                  flex: 1,
+                  padding: '1rem',
+                  backgroundColor: 'var(--bg-primary)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius)',
+                  fontFamily: 'monospace',
+                  fontSize: '13px',
+                  color: 'var(--text-primary)',
+                  resize: 'none',
+                  lineHeight: '1.6',
+                  marginBottom: '1rem'
+                }}
+              />
+
+              {/* Action Buttons */}
+              {output && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={copyToClipboard}
+                    style={{ padding: '0.6rem' }}
+                  >
+                    📋 Copy
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    onClick={exportToMarkdown}
+                    style={{ padding: '0.6rem' }}
+                  >
+                    📝 Markdown
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    onClick={exportToText}
+                    style={{ padding: '0.6rem' }}
+                  >
+                    📄 Text
+                  </button>
+                </div>
+              )}
+
+              {!output && !loading && (
+                <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem' }}>
+                  <p style={{ fontSize: '14px', margin: 0 }}>Fill the form and click "Generate Content" to see AI output here!</p>
+                </div>
+              )}
+
+              {loading && (
+                <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem' }}>
+                  <p style={{ fontSize: '14px', margin: 0 }}>⟳ Generating content...</p>
+                </div>
+              )}
             </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   )
@@ -493,7 +468,7 @@ function LoginScreen({ onLogin, error }) {
     <div className="modal-overlay">
       <div className="modal">
         <h1>🎓 AI Content Studio</h1>
-        <p>Professional AI content generator for CBSE K-12 education - Batch generation with multiple export formats.</p>
+        <p>Professional AI content generator for CBSE K-12 education.</p>
 
         {error && <div style={{ padding: '0.75rem', backgroundColor: 'var(--danger)', color: 'white', borderRadius: 'var(--radius)', marginBottom: '1rem', fontSize: '13px' }}>{error}</div>}
 
@@ -511,14 +486,12 @@ function LoginScreen({ onLogin, error }) {
           <div className="form-group">
             <label>
               <input type="checkbox" checked={showApiKeys} onChange={(e) => setShowApiKeys(e.target.checked)} />
-              {' '}Add API Keys (Required for content generation)
+              {' '}Add API Keys (Required)
             </label>
           </div>
 
           {showApiKeys && (
             <div style={{ marginBottom: '1rem', padding: '1rem', backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius)' }}>
-              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '1rem' }}>Add at least one API key to generate content:</p>
-              
               <div className="form-group">
                 <label>Claude API Key (Anthropic)</label>
                 <input
@@ -562,7 +535,7 @@ function LoginScreen({ onLogin, error }) {
           )}
 
           <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '0.75rem' }}>
-            Start Generating Content
+            Start Generating
           </button>
         </form>
       </div>
